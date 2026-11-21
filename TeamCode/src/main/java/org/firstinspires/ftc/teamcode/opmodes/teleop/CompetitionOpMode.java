@@ -67,10 +67,6 @@ public class CompetitionOpMode extends ModularOpMode {
     private int lastSpinSet = 0;          // 0 = off, 1 = Pollen only, 2 = Pollen + Nectar
     private boolean readyRumbled = false;
 
-    // gp2 double rumble when aim (gp2 X held) reaches AIMED. Re-armed when X is released or the error grows past
-    // aimRumbleRearmFactor x the aimed tolerance, so it doesn't buzz repeatedly at the edge of the tolerance.
-    public static double aimRumbleRearmFactor = 2.0;
-    private boolean aimRumbled = false;
 
     @Override
     protected void preload() {
@@ -122,13 +118,8 @@ public class CompetitionOpMode extends ModularOpMode {
                 gamepad1);
         registerSubsystem(localizerSubsystem);
 
-        // Auto-aim at the CELL on our half of the field + launcher speed from distance. gp2 X held: robot turns so the
-        // line between the launchers faces that CELL (which CELL is chosen from the pose, no button).
-        // Registered before the drivetrain so the drive gets this loop's turn command.
+        // Launcher speed from the distance to the CELL on our half of the field (chosen from the pose, no button).
         autoAimSubsystem = new AutoAimSubsystem(localizerSubsystem);
-        autoAimSubsystem.setBindings(bindingManager,
-                () -> gamepad2.x,
-                () -> gamepad1.right_stick_x);
         launcherSubsystem.setVelocitySources(autoAimSubsystem::getPollenBaseVelocity, autoAimSubsystem::getNectarBaseVelocity);
         registerSubsystem(autoAimSubsystem);
 
@@ -137,7 +128,7 @@ public class CompetitionOpMode extends ModularOpMode {
         mecanumDriveTrainSubsystem.setBindings(bindingManager,
                 () -> -gamepad1.left_stick_y,
                 () -> gamepad1.left_stick_x,
-                autoAimSubsystem::getTurn,          // driver's right stick, or auto-turn while gp2 X is held
+                () -> gamepad1.right_stick_x,
                 () -> 1,
                 localizerSubsystem::getDriveHeading);   // alliance-adjusted; 0 (robot-centric) until alliance + heading known
         registerSubsystem(mecanumDriveTrainSubsystem);
@@ -268,17 +259,6 @@ public class CompetitionOpMode extends ModularOpMode {
         if (spinSet != 0 && spinReady && !readyRumbled) {
             gamepad2.rumble(readyRumbleMs);
             readyRumbled = true;
-        }
-
-        // gp2 double rumble when aim locks on.
-        if (autoAimSubsystem.isAiming() && autoAimSubsystem.isAimed()) {
-            if (!aimRumbled) {
-                gamepad2.rumbleBlips(2);
-                aimRumbled = true;
-            }
-        } else if (!autoAimSubsystem.isAiming()
-                || !(Math.abs(autoAimSubsystem.getHeadingErrorDeg()) <= AutoAimSubsystem.aimedToleranceDeg * aimRumbleRearmFactor)) {
-            aimRumbled = false;
         }
 
         // gp2 RB / LB: pre-spin. With every wheel off, RB starts Pollen only and LB starts Pollen + Nectar. While any
