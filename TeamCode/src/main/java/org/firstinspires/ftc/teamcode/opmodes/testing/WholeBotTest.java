@@ -27,9 +27,9 @@ public class WholeBotTest extends ModularOpMode {
     private AutoAimSubsystem autoAimSubsystem;
     private MecanumDriveTrainSubsystem mecanumDriveTrainSubsystem;
 
-    // Per-shot feed gate: gamepad2 RT fires with the Pollen wheel, gamepad2 LT with both Pollen and Nectar. While either is
-    // held, the transfer runs only when every wheel that trigger needs is within readyBandTicks below its target (overshoot
-    // counts as ready). gp2 RB / LB pre-spin the wheels (Pollen / both) without feeding. After each ball the wheel dips 10-20 % and the
+    // Per-shot feed gate: either gamepad2 trigger fires Pollen. While one is held, the transfer runs only when the wheel is
+    // within readyBandTicks below its target (overshoot counts as ready). gp2 RB / LB pre-spin the wheel without feeding.
+    // After each ball the wheel dips 10-20 % and the
     // transfer pauses for the ~0.3 s it takes to recover, instead of pushing the next ball into a slow wheel.
     // Hub velocity comes in 20 ticks/s steps and the hold scatter is one step, so 40 = two steps.
     public static double readyBandTicks = 40;
@@ -54,28 +54,23 @@ public class WholeBotTest extends ModularOpMode {
     private boolean ballRumbleArmed = true;
     private final ElapsedTime sinceBallSeen = new ElapsedTime();
 
-    // gp2 pre-spin: RB toggles Pollen only, LB toggles Pollen + Nectar. Spins the wheels without feeding, so the
-    // first shot goes as soon as a fire trigger is pulled instead of waiting for spin-up from zero.
-    private enum SpinMode { OFF, POLLEN, BOTH }
-    private SpinMode spinMode = SpinMode.OFF;
+    // gp2 pre-spin: RB or LB toggles the Pollen wheel. Spins it without feeding, so the first shot goes as soon as a
+    // fire trigger is pulled instead of waiting for spin-up from zero.
+    private boolean preSpin = false;
 
-    // gp2 rumble once each time the spinning wheels first reach speed (re-armed when the set of spinning wheels changes).
+    // gp2 rumble once each time the wheel first reaches speed (re-armed when it stops).
     public static int readyRumbleMs = 250;
-    private int lastSpinSet = 0;          // 0 = off, 1 = Pollen only, 2 = Pollen + Nectar
     private boolean readyRumbled = false;
 
 
     @Override
     protected void preload() {
         launcherSubsystem = new LauncherSubsystem(
-                hardwareMap, telemetry, "pollenLauncherMotor", "nectarLauncherMotor");
+                hardwareMap, telemetry, "pollenLauncherMotor");
         launcherSubsystem.setBindings(bindingManager,
                 this::pollenEnabled,
-                this::nectarEnabled,
                 () -> gamepad2.dpadUpWasPressed(),
-                () -> gamepad2.dpadDownWasPressed(),
-                () -> gamepad2.yWasPressed(),
-                () -> gamepad2.aWasPressed());
+                () -> gamepad2.dpadDownWasPressed());
         registerSubsystem(launcherSubsystem);
 
         transferSubsystem = new TransferSubsystem(
@@ -115,7 +110,7 @@ public class WholeBotTest extends ModularOpMode {
 
         // Launcher speed from the distance to the CELL on our half of the field (chosen from the pose, no button).
         autoAimSubsystem = new AutoAimSubsystem(localizerSubsystem);
-        launcherSubsystem.setVelocitySources(autoAimSubsystem::getPollenBaseVelocity, autoAimSubsystem::getNectarBaseVelocity);
+        launcherSubsystem.setVelocitySource(autoAimSubsystem::getPollenBaseVelocity);
         registerSubsystem(autoAimSubsystem);
 
         mecanumDriveTrainSubsystem = new MecanumDriveTrainSubsystem(
@@ -147,46 +142,23 @@ public class WholeBotTest extends ModularOpMode {
         return !anyWheelSpinning() && !transferSubsystem.isReversing() && transferSubsystem.hasGameElement();
     }
 
-    /** gp2 RT: fire Pollen. */
-    private boolean firePollen() {
-        return gamepad2.right_trigger > 0.1;
-    }
-
-    /** gp2 LT: fire Pollen + Nectar. */
-    private boolean fireBoth() {
-        return gamepad2.left_trigger > 0.1;
-    }
-
+    /** gp2 RT or LT: fire Pollen. */
     private boolean isFiring() {
-        return firePollen() || fireBoth();
+        return gamepad2.right_trigger > 0.1 || gamepad2.left_trigger > 0.1;
     }
 
-    /** Pollen wheel spins on either fire trigger or either pre-spin mode. */
+    /** Pollen wheel spins while a fire trigger is held or pre-spin is on. */
     private boolean pollenEnabled() {
-        return isFiring() || spinMode != SpinMode.OFF;
-    }
-
-    /** Nectar wheel spins on gp2 LT or the LB (both) pre-spin. */
-    private boolean nectarEnabled() {
-        return fireBoth() || spinMode == SpinMode.BOTH;
+        return isFiring() || preSpin;
     }
 
     private boolean anyWheelSpinning() {
-        return pollenEnabled() || nectarEnabled();
+        return pollenEnabled();
     }
 
-    private boolean pollenReady() {
-        return Math.abs(launcherSubsystem.getPollenCurrentVelocity()) >= launcherSubsystem.getPollenTargetVelocity() - readyBandTicks;
-    }
-
-    private boolean nectarReady() {
-        return Math.abs(launcherSubsystem.getNectarCurrentVelocity()) >= launcherSubsystem.getNectarTargetVelocity() - readyBandTicks;
-    }
-
-    /** Every wheel the held fire trigger needs (RT: Pollen; LT: Pollen + Nectar) is within readyBandTicks below its
-     *  target; above target counts as ready. A wheel that is only pre-spinning does not hold up an RT shot. */
+    /** Wheel within readyBandTicks below its target; above target counts as ready. */
     private boolean wheelReady() {
-        return pollenReady() && (!fireBoth() || nectarReady());
+        return Math.abs(launcherSubsystem.getPollenCurrentVelocity()) >= launcherSubsystem.getPollenTargetVelocity() - readyBandTicks;
     }
 
     /** Per-shot gate: feed only while a fire trigger is held and its wheels are ready. Pre-spin alone never feeds. No latch. */
@@ -225,24 +197,18 @@ public class WholeBotTest extends ModularOpMode {
             ballRumbleArmed = true;
         }
 
-        // gp2 rumble when the spinning wheels first reach speed.
-        int spinSet = nectarEnabled() ? 2 : (pollenEnabled() ? 1 : 0);
-        if (spinSet != lastSpinSet) { readyRumbled = false; lastSpinSet = spinSet; }
-        boolean spinReady = (!pollenEnabled() || pollenReady()) && (!nectarEnabled() || nectarReady());
-        if (spinSet != 0 && spinReady && !readyRumbled) {
+        // gp2 rumble when the spinning wheel first reaches speed.
+        if (!pollenEnabled()) readyRumbled = false;
+        else if (wheelReady() && !readyRumbled) {
             gamepad2.rumble(readyRumbleMs);
             readyRumbled = true;
         }
 
-        // gp2 RB / LB: pre-spin. With every wheel off, RB starts Pollen only and LB starts Pollen + Nectar. While any
-        // wheel spins, either bumper turns pre-spin off, so one press always stops. (Nov 15: the old per-bumper toggle
-        // let RB/LB alternate Pollen <-> Both without ever reaching off.) A held fire trigger still spins its wheels.
+        // gp2 RB / LB: pre-spin. With the wheel off, either bumper starts it; while it spins, either bumper stops
+        // pre-spin, so one press always stops. A held fire trigger still spins the wheel.
         boolean rbPressed = gamepad2.rightBumperWasPressed();
         boolean lbPressed = gamepad2.leftBumperWasPressed();
-        if (rbPressed || lbPressed) {
-            if (anyWheelSpinning()) spinMode = SpinMode.OFF;
-            else spinMode = rbPressed ? SpinMode.POLLEN : SpinMode.BOTH;
-        }
+        if (rbPressed || lbPressed) preSpin = !anyWheelSpinning();
 
 //        // Macro state machine
 //        switch (macroState) {
@@ -273,8 +239,7 @@ public class WholeBotTest extends ModularOpMode {
 
         localizerSubsystem.addTelemetry(telemetry);
         autoAimSubsystem.addTelemetry(telemetry);
-        telemetry.addData("Speed offset Pollen / Nectar (gp2 B clears)", "%+.0f / %+.0f",
-                launcherSubsystem.getPollenOffset(), launcherSubsystem.getNectarOffset());
+        telemetry.addData("Speed offset Pollen (gp2 B clears)", "%+.0f", launcherSubsystem.getPollenOffset());
         telemetry.addData("Flower pickup (gp1 Y)", !flowerMode ? "off"
                 : (intakeSubsystem.isFlowerWaitingForRetract() ? "ON - retracting extender" : "ON - bar down, intaking"));
         telemetry.addData("Flower bar", !intakeSubsystem.isFlowerBarConfigured() ? "NOT CONFIGURED (flowerBarServo)"
@@ -294,9 +259,7 @@ public class WholeBotTest extends ModularOpMode {
         telemetry.addData("Triggers (gp2 RT / LT)", "%.2f / %.2f", gamepad2.right_trigger, gamepad2.left_trigger);
         telemetry.addData("Pollen flywheel", "%s  %.0f / %.0f", pollenEnabled() ? "ON" : "OFF",
                 launcherSubsystem.getPollenCurrentVelocity(), launcherSubsystem.getPollenTargetVelocity());
-        telemetry.addData("Nectar flywheel", "%s  %.0f / %.0f", nectarEnabled() ? "ON" : "OFF",
-                launcherSubsystem.getNectarCurrentVelocity(), launcherSubsystem.getNectarTargetVelocity());
-        telemetry.addData("Pre-spin (gp2 RB / LB)", spinMode);
+        telemetry.addData("Pre-spin (gp2 RB / LB)", preSpin ? "ON" : "off");
         telemetry.addData("Transfer mode", transferSubsystem.getMode());   // FULL (launch) / NUDGE / HELD / OFF
         telemetry.addData("Transfer motor / servos", "%.2f / %.2f",
                 transferSubsystem.getMotorCommand(), transferSubsystem.getServoCommand());
@@ -313,7 +276,7 @@ public class WholeBotTest extends ModularOpMode {
         }
         double distance2 = transferSubsystem.getDistance2();
         telemetry.addData("Distance2 (cm)", Double.isNaN(distance2) ? "not found" : String.format("%.1f", distance2));
-        telemetry.addLine("gp2 RB: pre-spin pollen | gp2 LB: pre-spin both | gp2 RT: shoot pollen | gp2 LT: shoot pollen + nectar | dpad up/down: pollen vel +/-20 | Y/A: nectar vel +/-20");
+        telemetry.addLine("gp2 RB/LB: pre-spin on/off | gp2 RT/LT: shoot | dpad up/down: vel +/-20 | B: clear offset");
         telemetry.addData("Reverse step (gp1 RB)", transferSubsystem.isReversing() ? "RUNNING"
                 : String.format("last %d / %d ticks%s", transferSubsystem.getLastReverseTicks(),
                         TransferSubsystem.reverseStepTicks, transferSubsystem.didLastReverseTimeOut() ? " (TIMED OUT)" : ""));
@@ -324,9 +287,7 @@ public class WholeBotTest extends ModularOpMode {
         if (gateOpen != lastGateOpen) {
             android.util.Log.d("TransferGate", "t_ms=" + (System.nanoTime() / 1_000_000L) + " open=" + (gateOpen ? 1 : 0)
                     + " pollen_actual=" + (int) launcherSubsystem.getPollenCurrentVelocity()
-                    + " pollen_target=" + (int) launcherSubsystem.getPollenTargetVelocity()
-                    + " nectar_actual=" + (int) launcherSubsystem.getNectarCurrentVelocity()
-                    + " nectar_target=" + (int) launcherSubsystem.getNectarTargetVelocity());
+                    + " pollen_target=" + (int) launcherSubsystem.getPollenTargetVelocity());
             lastGateOpen = gateOpen;
         }
         telemetry.addData("Feed gate", isFiring() ? (gateOpen ? "OPEN" : "waiting for wheel") : (anyWheelSpinning() ? "pre-spinning" : "launcher off"));

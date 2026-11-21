@@ -31,7 +31,7 @@ public class Tasks {
 
     private boolean launcherActive;
 
-    // How close each wheel must sit to its own target before we feed (ticks/s). Hub velocity arrives in ~20 ticks/s
+    // How close the wheel must sit to its target before we feed (ticks/s). Hub velocity arrives in ~20 ticks/s
     // steps and the flywheel PID settles with a little steady-state error, so we wait for "at speed", not an exact match.
     private static final double LAUNCHER_AT_SPEED_TOLERANCE = 30;
     // Give up waiting for "at speed" after this long and shoot anyway, so a wheel that never gets there (loose motor or
@@ -42,10 +42,9 @@ public class Tasks {
      * @param pollenBaseVelocity base Pollen target (ticks/s), e.g. AutoAimSubsystem::getPollenBaseVelocity. Return NaN
      *                           (no pose) to let the launcher use its fixed default. Pass {@code () -> Double.NaN} to
      *                           always use defaults.
-     * @param nectarBaseVelocity base Nectar target (ticks/s); same NaN = default convention.
      */
     public Tasks(Follower follower, IntakeSubsystem intake, TransferSubsystem transfer, LauncherSubsystem launcher,
-                 BindingManager bindingManager, DoubleSupplier pollenBaseVelocity, DoubleSupplier nectarBaseVelocity) {
+                 BindingManager bindingManager, DoubleSupplier pollenBaseVelocity) {
         this.follower = follower;
         this.intake = intake;
         this.transfer = transfer;
@@ -53,10 +52,10 @@ public class Tasks {
 
         intake.setBindings(bindingManager, () -> intakeSpeed, () -> intakeExtend);
         transfer.setBindings(bindingManager, () -> transferServoActive, () -> transferActive);
-        launcher.setBindings(bindingManager, () -> launcherActive, () -> launcherActive);
+        launcher.setBindings(bindingManager, () -> launcherActive);
         // The launcher recomputes its target as base + manual offset every loop, so the automatic distance-based speed
         // is applied continuously while the wheels are on; the launch task just opens the gate and waits for "at speed".
-        launcher.setVelocitySources(pollenBaseVelocity, nectarBaseVelocity);
+        launcher.setVelocitySource(pollenBaseVelocity);
     }
 
 
@@ -101,14 +100,13 @@ public class Tasks {
     }
 
     /**
-     * Wait until each wheel is within tolerance of its own live target (Pollen and Nectar run at different speeds), or
-     * LAUNCHER_SPIN_UP_TIMEOUT_MS passes, whichever comes first.
+     * Wait until the Pollen wheel is within tolerance of its live target, or LAUNCHER_SPIN_UP_TIMEOUT_MS passes,
+     * whichever comes first.
      */
     public Task autoWaitForLauncherVelocityTask() {
         return new RaceTask(
             new WaitUntilTask(
                 () -> launcher.getPollenCurrentVelocity() >= launcher.getPollenTargetVelocity() - LAUNCHER_AT_SPEED_TOLERANCE
-                   && launcher.getNectarCurrentVelocity() >= launcher.getNectarTargetVelocity() - LAUNCHER_AT_SPEED_TOLERANCE
             ),
             new SleepTask(LAUNCHER_SPIN_UP_TIMEOUT_MS)
         );

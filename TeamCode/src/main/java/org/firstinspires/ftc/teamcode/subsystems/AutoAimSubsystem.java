@@ -18,13 +18,12 @@ import org.firstinspires.ftc.teamcode.util.PoseStorage.Alliance;
  * We always target the CELL on the robot's half of the field (audience or far side, from the pose); nothing reads the
  * camera and no button selects it.
  *
- * Robot: both launchers fire out the robot's RIGHT side (shot direction = heading - 90 deg). Along the robot's length
- * (from CAD, 18 in robot, tracking center 9 in from the front): Pollen launcher 6.148 in behind the center, Nectar
- * 0.623 in ahead.
+ * Robot (bot 1.5, Pollen only): the Pollen launcher sits pollenForwardOffset along the robot from the tracking center.
+ * The value is still bot 1.0's CAD number (6.148 in behind the center); update it to the turret pivot.
  *
- * Velocity: each launcher's base target comes from its own table of (distance from that launcher to the CELL ->
- * ticks/s), linear between points and flat past the ends (measured Nov 18). Without a known pose the base velocities
- * are NaN and LauncherSubsystem falls back to its own fixed defaults.
+ * Velocity: the base target comes from a table of (distance from the launcher to the CELL ->
+ * ticks/s), linear between points and flat past the ends (measured Nov 18). Without a known pose the base velocity
+ * is NaN and LauncherSubsystem falls back to its fixed default.
  */
 @Configurable
 public class AutoAimSubsystem extends Subsystem {
@@ -35,16 +34,13 @@ public class AutoAimSubsystem extends Subsystem {
     public static double audienceCellY = 55.0;
     public static double farCellY = 86.5;
 
-    // Launcher positions along the robot's forward axis, inches from the tracking center (+ = forward)
+    // Pollen launcher position along the robot's forward axis, inches from the tracking center (+ = forward)
     public static double pollenForwardOffset = -6.148;
-    public static double nectarForwardOffset = 0.623;
 
-    // Distance (in) -> velocity (ticks/s) tables, 5 points each, flat past the ends. Edit live in Panels.
-    // Measured Nov 18 2026 (Red audience CELL). ~60 in is about the farthest shot (field corner), ~43 in the farthest
-    // straight-on shot. Pollen: same speed straight or angled. Nectar: measured on ANGLED (~50 deg) shots.
+    // Distance (in) -> velocity (ticks/s) table, 5 points, flat past the ends. Edit live in Panels.
+    // Measured Nov 18 2026 on bot 1.0 (Red audience CELL); same speed straight or angled. Re-check on bot 1.5.
     public static double dist1 = 33, dist2 = 44, dist3 = 50, dist4 = 55, dist5 = 60;
     public static double pollenVel1 = 1300, pollenVel2 = 1320, pollenVel3 = 1340, pollenVel4 = 1380, pollenVel5 = 1440;
-    public static double nectarVel1 = 1480, nectarVel2 = 1540, nectarVel3 = 1540, nectarVel4 = 1540, nectarVel5 = 1560;
 
     public enum CellSide { AUDIENCE, FAR }
 
@@ -81,17 +77,11 @@ public class AutoAimSubsystem extends Subsystem {
     }
 
     public double getPollenDistance() { return launcherDistance(pollenForwardOffset); }
-    public double getNectarDistance() { return launcherDistance(nectarForwardOffset); }
 
     /** Base Pollen velocity from the table; NaN when the pose is not known (the launcher then uses its default). */
     public double getPollenBaseVelocity() {
         if (!isAvailable()) return Double.NaN;
         return interpolate(getPollenDistance(), pollenVel1, pollenVel2, pollenVel3, pollenVel4, pollenVel5);
-    }
-
-    public double getNectarBaseVelocity() {
-        if (!isAvailable()) return Double.NaN;
-        return interpolate(getNectarDistance(), nectarVel1, nectarVel2, nectarVel3, nectarVel4, nectarVel5);
     }
 
     private static double interpolate(double d, double v1, double v2, double v3, double v4, double v5) {
@@ -132,7 +122,6 @@ public class AutoAimSubsystem extends Subsystem {
         }
         telemetry.addLine("TARGET: " + cellName() + "  (auto: the CELL on your half of the field)");
         telemetry.addData("Pollen dist / base vel", "%.1f in / %.0f", getPollenDistance(), getPollenBaseVelocity());
-        telemetry.addData("Nectar dist / base vel", "%.1f in / %.0f", getNectarDistance(), getNectarBaseVelocity());
     }
 
     @Override

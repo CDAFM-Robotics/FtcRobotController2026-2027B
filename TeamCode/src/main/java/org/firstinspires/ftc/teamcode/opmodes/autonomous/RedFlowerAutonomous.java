@@ -38,15 +38,14 @@ public class RedFlowerAutonomous extends ModularOpMode {
 
         intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
         transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
-        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor", "nectarLauncherMotor");
+        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
 
-        // Auto-aim reads the Follower pose and feeds the launcher distance-based velocities; +40 over the table (the
-        // Flower-side shot ran 50 hotter than it needed). Registered with no aim bindings, so it never auto-turns.
+        // Auto-aim reads the Follower pose and feeds the launcher a distance-based velocity; +40 over the table (the
+        // Flower-side shot ran 50 hotter than it needed). 
         AutoAimSubsystem autoAim = new AutoAimSubsystem(new FollowerPoseSource(follower, Alliance.RED));
         final double launchVelocityBoost = 40;
         tasks = new Tasks(follower, intakeSubsystem, transferSubsystem, launcherSubsystem, bindingManager,
-                () -> autoAim.getPollenBaseVelocity() + launchVelocityBoost,
-                () -> autoAim.getNectarBaseVelocity() + launchVelocityBoost);
+                () -> autoAim.getPollenBaseVelocity() + launchVelocityBoost);
 
         registerSubsystem(autoAim);
         registerSubsystem(intakeSubsystem);

@@ -10,7 +10,7 @@ import org.firstinspires.ftc.teamcode.subsystems.LauncherSubsystem;
 import org.firstinspires.ftc.teamcode.util.LoopProfiler;
 
 /**
- * Closed-loop step test of the launcher, no gamepad needed: both wheels on at their targets for onSeconds, off for
+ * Closed-loop step test of the launcher, no gamepad needed: the Pollen wheel on at its target for onSeconds, off for
  * offSeconds, repeated cycles times, then the OpMode stops itself. Spin-up time, overshoot and hold come straight
  * out of the LauncherVelocity log, which carries target, actual, power and battery voltage every loop.
  */
@@ -30,8 +30,8 @@ public class LauncherStepTest extends ModularOpMode {
 
     @Override
     protected void preload() {
-        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor", "nectarLauncherMotor");
-        launcherSubsystem.setBindings(bindingManager, () -> on, () -> on);
+        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
+        launcherSubsystem.setBindings(bindingManager, () -> on);
         registerSubsystem(launcherSubsystem);
     }
 

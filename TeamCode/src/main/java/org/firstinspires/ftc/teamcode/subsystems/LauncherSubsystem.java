@@ -36,43 +36,30 @@ public class LauncherSubsystem extends Subsystem {
     public static int voltageReadPeriodMs = 250;
     public static int logEveryNLoops = 1;      // LauncherVelocity Log.d cadence; 0 = off
 
+    // Bot 1.5 is Pollen-only: one flywheel, on the turret (Nectar removed Nov 21 2026).
     private final FlywheelMotorDevice pollenLauncherMotor;
-    private final FlywheelMotorDevice nectarLauncherMotor;
 
     private BindingManager bindingManager;
 
     private final Telemetry telemetry;
     private final TelemetryManager panelsTelemetry;
 
-    public LauncherSubsystem(HardwareMap hardwareMap, Telemetry telemetry, String pollenLauncherMotorName, String nectarLauncherMotorName) {
+    public LauncherSubsystem(HardwareMap hardwareMap, Telemetry telemetry, String pollenLauncherMotorName) {
         pollenLauncherMotor = new FlywheelMotorDevice(hardwareMap, pollenLauncherMotorName);
-        nectarLauncherMotor = new FlywheelMotorDevice(hardwareMap, nectarLauncherMotorName);
 
         this.telemetry = telemetry;
         this.panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
     }
-    public void setBindings(BindingManager bindingManager, BooleanSupplier pollenMotor, BooleanSupplier nectarMotor, BooleanSupplier increasePollenMotorVelocity, BooleanSupplier decreasePollenMotorVelocity, BooleanSupplier increaseNectarMotorVelocity, BooleanSupplier decreaseNectarMotorVelocity) {
+    public void setBindings(BindingManager bindingManager, BooleanSupplier pollenMotor, BooleanSupplier increasePollenMotorVelocity, BooleanSupplier decreasePollenMotorVelocity) {
         bindingManager.addBinding("pollenMotor", pollenMotor);
-        bindingManager.addBinding("nectarMotor", nectarMotor);
-
         bindingManager.addBinding("increasePollenMotorVelocity", increasePollenMotorVelocity);
         bindingManager.addBinding("decreasePollenMotorVelocity", decreasePollenMotorVelocity);
-        bindingManager.addBinding("increaseNectarMotorVelocity", increaseNectarMotorVelocity);
-        bindingManager.addBinding("decreaseNectarMotorVelocity", decreaseNectarMotorVelocity);
 
         this.bindingManager = bindingManager;
     }
 
-    public void setBindings(BindingManager bindingManager, BooleanSupplier pollenMotor, BooleanSupplier nectarMotor) {
-        bindingManager.addBinding("pollenMotor", pollenMotor);
-        bindingManager.addBinding("nectarMotor", nectarMotor);
-
-        bindingManager.addBinding("increasePollenMotorVelocity", () -> false);
-        bindingManager.addBinding("decreasePollenMotorVelocity", () -> false);
-        bindingManager.addBinding("increaseNectarMotorVelocity", () -> false);
-        bindingManager.addBinding("decreaseNectarMotorVelocity", () -> false);
-
-        this.bindingManager = bindingManager;
+    public void setBindings(BindingManager bindingManager, BooleanSupplier pollenMotor) {
+        setBindings(bindingManager, pollenMotor, () -> false, () -> false);
     }
 
     @Override
@@ -83,10 +70,6 @@ public class LauncherSubsystem extends Subsystem {
         pollenLauncherMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         pollenLauncherMotor.setDirection(DcMotorSimple.Direction.FORWARD);
 
-        nectarLauncherMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-        nectarLauncherMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        nectarLauncherMotor.setDirection(DcMotorSimple.Direction.FORWARD);
-
         applyGains();
     }
 
@@ -94,35 +77,28 @@ public class LauncherSubsystem extends Subsystem {
     public void init_loop() {
 
     }
- // ~3900 RPM (ticks/sec = RPM / 60 * 28)
     @Override
     public void start() {
 
     }
 
     private static final double POLLEN_LAUNCHER_DEFAULT_VELOCITY = 1460; // ~3321 RPM (ticks/sec = RPM / 60 * 28)
-    private static final double NECTAR_LAUNCHER_DEFAULT_VELOCITY = 1540; // ~3900 RPM (ticks/sec = RPM / 60 * 28)
 
     private double pollenLauncherVelocity = POLLEN_LAUNCHER_DEFAULT_VELOCITY;
-    private double nectarLauncherVelocity = NECTAR_LAUNCHER_DEFAULT_VELOCITY;
 
     // Target = base + offset. The base is the default above, or a supplier (AutoAimSubsystem's distance table) when
-    // setVelocitySources was called and it returns a number (NaN = no value, use the default). The +/-20 buttons move
+    // setVelocitySource was called and it returns a number (NaN = no value, use the default). The +/-20 buttons move
     // the offset, so they keep working on top of auto velocity.
     private DoubleSupplier pollenBaseSource = null;
-    private DoubleSupplier nectarBaseSource = null;
     private double pollenOffset = 0;
-    private double nectarOffset = 0;
 
-    /** Use these as the base target velocities (ticks/s) instead of the fixed defaults. */
-    public void setVelocitySources(DoubleSupplier pollenBase, DoubleSupplier nectarBase) {
+    /** Use this as the base target velocity (ticks/s) instead of the fixed default. */
+    public void setVelocitySource(DoubleSupplier pollenBase) {
         pollenBaseSource = pollenBase;
-        nectarBaseSource = nectarBase;
     }
 
     public double getPollenOffset() { return pollenOffset; }
-    public double getNectarOffset() { return nectarOffset; }
-    public void resetOffsets() { pollenOffset = 0; nectarOffset = 0; }
+    public void resetOffsets() { pollenOffset = 0; }
 
     /** The source's value, or the default when there is no source or it returns NaN. */
     private static double base(DoubleSupplier source, double defaultVelocity) {
@@ -133,30 +109,21 @@ public class LauncherSubsystem extends Subsystem {
 
     public double getPollenTargetVelocity() { return pollenLauncherVelocity; }
     public double getPollenCurrentVelocity() { return pollenLauncherMotor.getCurrentVelocity(); }
-    public double getNectarTargetVelocity() { return nectarLauncherVelocity; }
-    public double getNectarCurrentVelocity() { return nectarLauncherMotor.getCurrentVelocity(); }
 
     private final double LAUNCHER_MOTOR_VELOCITY_TUNING = 20;
 
     private boolean prevIncreasePollenVelocity = false;
     private boolean prevDecreasePollenVelocity = false;
-    private boolean prevIncreaseNectarVelocity = false;
-    private boolean prevDecreaseNectarVelocity = false;
 
     private long loopCount = 0;
     private final StringBuilder logLine = new StringBuilder(160);
 
     private void applyGains() {
         pollenLauncherMotor.setGains(kS, kV, kP, kI, kIMax).setNominalVoltage(nominalVoltage).setVoltageReadPeriodMs(voltageReadPeriodMs);
-        nectarLauncherMotor.setGains(kS, kV, kP, kI, kIMax).setNominalVoltage(nominalVoltage).setVoltageReadPeriodMs(voltageReadPeriodMs);
     }
 
     public void setPollenLauncherVelocity(double velocity) {
         pollenLauncherVelocity = velocity;
-    }
-
-    public void setNectarLauncherVelocity(double velocity) {
-        nectarLauncherVelocity = velocity;
     }
 
     @Override
@@ -165,21 +132,14 @@ public class LauncherSubsystem extends Subsystem {
 
         boolean increasePollenNow = bindingManager.checkBinding("increasePollenMotorVelocity");
         boolean decreasePollenNow = bindingManager.checkBinding("decreasePollenMotorVelocity");
-        boolean increaseNectarNow = bindingManager.checkBinding("increaseNectarMotorVelocity");
-        boolean decreaseNectarNow = bindingManager.checkBinding("decreaseNectarMotorVelocity");
 
         if (increasePollenNow && !prevIncreasePollenVelocity) pollenOffset += LAUNCHER_MOTOR_VELOCITY_TUNING;
         if (decreasePollenNow && !prevDecreasePollenVelocity) pollenOffset -= LAUNCHER_MOTOR_VELOCITY_TUNING;
-        if (increaseNectarNow && !prevIncreaseNectarVelocity) nectarOffset += LAUNCHER_MOTOR_VELOCITY_TUNING;
-        if (decreaseNectarNow && !prevDecreaseNectarVelocity) nectarOffset -= LAUNCHER_MOTOR_VELOCITY_TUNING;
 
         prevIncreasePollenVelocity = increasePollenNow;
         prevDecreasePollenVelocity = decreasePollenNow;
-        prevIncreaseNectarVelocity = increaseNectarNow;
-        prevDecreaseNectarVelocity = decreaseNectarNow;
 
         pollenLauncherVelocity = base(pollenBaseSource, POLLEN_LAUNCHER_DEFAULT_VELOCITY) + pollenOffset;
-        nectarLauncherVelocity = base(nectarBaseSource, NECTAR_LAUNCHER_DEFAULT_VELOCITY) + nectarOffset;
 
         if (bindingManager.checkBinding("pollenMotor")) {
             pollenLauncherMotor.setVelocity(pollenLauncherVelocity);
@@ -187,36 +147,22 @@ public class LauncherSubsystem extends Subsystem {
             pollenLauncherMotor.setVelocity(0);
         }
 
-        if (bindingManager.checkBinding("nectarMotor")) {
-            nectarLauncherMotor.setVelocity(nectarLauncherVelocity);
-        } else {
-            nectarLauncherMotor.setVelocity(0);
-        }
-
-        // Run the loops first so telemetry and the log describe this loop's command.
-        nectarLauncherMotor.update();
+        // Run the loop first so telemetry and the log describe this loop's command.
         pollenLauncherMotor.update();
 
         double pollenActual = pollenLauncherMotor.getCurrentVelocity();
-        double nectarActual = nectarLauncherMotor.getCurrentVelocity();
 
         telemetry.addData("Pollen Launcher Target Velocity", pollenLauncherVelocity);
-        telemetry.addData("Nectar Launcher Target Velocity", nectarLauncherVelocity);
-        telemetry.addLine();
         telemetry.addData("Pollen Launcher Actual Velocity", pollenActual);
-        telemetry.addData("Nectar Launcher Actual Velocity", nectarActual);
 
         panelsTelemetry.addData("Pollen Target Velocity", pollenLauncherVelocity);
         panelsTelemetry.addData("Pollen Actual Velocity", pollenActual);
         panelsTelemetry.addData("Pollen Power", pollenLauncherMotor.getLastOutput());
-        panelsTelemetry.addData("Nectar Target Velocity", nectarLauncherVelocity);
-        panelsTelemetry.addData("Nectar Actual Velocity", nectarActual);
-        panelsTelemetry.addData("Nectar Power", nectarLauncherMotor.getLastOutput());
         panelsTelemetry.addData("Battery V", pollenLauncherMotor.getBatteryVoltage());
         if (panelsTelemetry.getShouldUpdateLines()) panelsTelemetry.update(telemetry);
 
-        // Per-loop record for offline analysis. Same keys as before (the log parsers rely on them) plus power and
-        // battery voltage, which the Nov 5 analysis lacked. Built without String.format; cadence from Panels.
+        // Per-loop record for offline analysis. Pollen keys unchanged (the log parsers rely on them); nectar_* keys
+        // dropped with the Nectar wheel. Built without String.format; cadence from Panels.
         loopCount++;
         if (logEveryNLoops > 0 && loopCount % logEveryNLoops == 0) {
             StringBuilder sb = logLine;
@@ -224,10 +170,7 @@ public class LauncherSubsystem extends Subsystem {
             sb.append("t_ms=").append(System.nanoTime() / 1_000_000L)
               .append(" pollen_target=").append((int) pollenLauncherMotor.getTargetVelocity())   // commanded: 0 when off
               .append(" pollen_actual=").append((int) pollenActual)
-              .append(" nectar_target=").append((int) nectarLauncherMotor.getTargetVelocity())
-              .append(" nectar_actual=").append((int) nectarActual)
               .append(" pollen_power=").append(Math.round(pollenLauncherMotor.getLastOutput() * 1000) / 1000.0)
-              .append(" nectar_power=").append(Math.round(nectarLauncherMotor.getLastOutput() * 1000) / 1000.0)
               .append(" vbat=").append(Math.round(pollenLauncherMotor.getBatteryVoltage() * 100) / 100.0);
             Log.d("LauncherVelocity", sb.toString());
         }

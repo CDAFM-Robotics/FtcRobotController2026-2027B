@@ -15,9 +15,9 @@ public class LauncherSubsystemTest extends ModularOpMode {
 
     @Override
     protected void preload() {
-        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor", "nectarLauncherMotor");
+        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
 
-        launcherSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.left_bumper, () -> gamepad1.dpadUpWasPressed(), () -> gamepad1.dpadDownWasPressed(), () -> gamepad1.dpadRightWasPressed(), () -> gamepad1.dpadLeftWasPressed());
+        launcherSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.dpadUpWasPressed(), () -> gamepad1.dpadDownWasPressed());
 
         registerSubsystem(launcherSubsystem);
     }

@@ -37,15 +37,14 @@ public class BlueGardenAutonomous extends ModularOpMode {
 
         intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
         transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
-        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor", "nectarLauncherMotor");
+        launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
 
-        // Auto-aim reads the Follower pose and feeds the launcher distance-based velocities; +90 over the table because
-        // shots were landing short. Registered with no aim bindings, so it never auto-turns.
+        // Auto-aim reads the Follower pose and feeds the launcher a distance-based velocity; +90 over the table because
+        // shots were landing short.
         AutoAimSubsystem autoAim = new AutoAimSubsystem(new FollowerPoseSource(follower, Alliance.BLUE));
         final double launchVelocityBoost = 90;
         tasks = new Tasks(follower, intakeSubsystem, transferSubsystem, launcherSubsystem, bindingManager,
-                () -> autoAim.getPollenBaseVelocity() + launchVelocityBoost,
-                () -> autoAim.getNectarBaseVelocity() + launchVelocityBoost);
+                () -> autoAim.getPollenBaseVelocity() + launchVelocityBoost);
 
         registerSubsystem(autoAim);
         registerSubsystem(intakeSubsystem);
