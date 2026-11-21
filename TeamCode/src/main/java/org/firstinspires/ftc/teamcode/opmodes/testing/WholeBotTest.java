@@ -7,12 +7,14 @@ import com.cdarobotics.cdalib.opmodes.ModularOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import org.firstinspires.ftc.teamcode.devices.AxonTurretAngleSource;
 import org.firstinspires.ftc.teamcode.subsystems.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.LauncherSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.LocalizerSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.MecanumDriveTrainSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.TransferSubsystem;
+import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
 import org.firstinspires.ftc.teamcode.util.LoopProfiler;
 
 @Configurable
@@ -25,6 +27,15 @@ public class WholeBotTest extends ModularOpMode {
     private IntakeSubsystem intakeSubsystem;
     private LocalizerSubsystem localizerSubsystem;
     private AutoAimSubsystem autoAimSubsystem;
+    private TurretSubsystem turretSubsystem;
+
+    // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
+    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. gp2 dpad left/right
+    // trim the aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
+    public static double turretTrimStepDeg = 1.0;
+    // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).
+    public static boolean requireTurretOnTarget = true;
+    private double turretTrimDeg = 0;
     private MecanumDriveTrainSubsystem mecanumDriveTrainSubsystem;
 
     // Per-shot feed gate: either gamepad2 trigger fires Pollen. While one is held, the transfer runs only when the wheel is
@@ -113,6 +124,10 @@ public class WholeBotTest extends ModularOpMode {
         launcherSubsystem.setVelocitySource(autoAimSubsystem::getPollenBaseVelocity);
         registerSubsystem(autoAimSubsystem);
 
+        turretSubsystem = new TurretSubsystem(hardwareMap, "turretServo", "turretHomeSensor",
+                new AxonTurretAngleSource(hardwareMap, "turretServoSignal"));
+        registerSubsystem(turretSubsystem);
+
         mecanumDriveTrainSubsystem = new MecanumDriveTrainSubsystem(
                 hardwareMap, "frontLeftDriveMotor", "backLeftDriveMotor", "frontRightDriveMotor", "backRightDriveMotor");
         mecanumDriveTrainSubsystem.setBindings(bindingManager,
@@ -161,9 +176,37 @@ public class WholeBotTest extends ModularOpMode {
         return Math.abs(launcherSubsystem.getPollenCurrentVelocity()) >= launcherSubsystem.getPollenTargetVelocity() - readyBandTicks;
     }
 
-    /** Per-shot gate: feed only while a fire trigger is held and its wheels are ready. Pre-spin alone never feeds. No latch. */
+    /** True while the turret is following the CELL (homed, pose known). */
+    private boolean turretAiming() {
+        return turretSubsystem.isHomed() && !turretSubsystem.isHoming() && autoAimSubsystem.isAvailable();
+    }
+
+    /** Turret doesn't hold up the shot when it isn't aiming; while aiming it must be on target. */
+    private boolean turretReady() {
+        return !requireTurretOnTarget || !turretAiming() || turretSubsystem.isOnTarget();
+    }
+
+    /** Per-shot gate: feed only while a fire trigger is held, the wheel is ready and the turret is on target. Pre-spin alone never feeds. No latch. */
     private boolean transferShouldRun() {
-        return isFiring() && wheelReady();
+        return isFiring() && wheelReady() && turretReady();
+    }
+
+    @Override
+    public void start() {
+        super.start();
+        turretSubsystem.homeIfNeeded();
+    }
+
+    /** Turret commands for this loop; runs before the subsystems update. */
+    private void updateTurret() {
+        if (gamepad2.xWasPressed()) turretSubsystem.startHoming();
+        if (gamepad2.dpadRightWasPressed()) turretTrimDeg += turretTrimStepDeg;
+        if (gamepad2.dpadLeftWasPressed())  turretTrimDeg -= turretTrimStepDeg;
+        if (turretAiming()) {
+            turretSubsystem.setTargetDeg(autoAimSubsystem.getTurretTargetDeg() + turretTrimDeg);
+        } else if (turretSubsystem.isHomed() && !turretSubsystem.isHoming()) {
+            turretSubsystem.setTargetDeg(TurretSubsystem.homeAngleDeg);
+        }
     }
 
     @Override
@@ -175,6 +218,7 @@ public class WholeBotTest extends ModularOpMode {
     @Override
     public void loop() {
         LoopProfiler.begin();
+        updateTurret();
         // gp1 RB: reverse the transfer one ball space (motor backwards only)
         boolean rbNow = gamepad1.right_bumper;
         if (rbNow && !prevRB) transferSubsystem.startReverseStep();
@@ -233,12 +277,14 @@ public class WholeBotTest extends ModularOpMode {
 //        }
 
         // gp2 B: clear the +/-20 speed offsets back to 0 (target = table speed)
-        if (gamepad2.bWasPressed()) launcherSubsystem.resetOffsets();
+        if (gamepad2.bWasPressed()) { launcherSubsystem.resetOffsets(); turretTrimDeg = 0; }
 
         // Telemetry
 
         localizerSubsystem.addTelemetry(telemetry);
         autoAimSubsystem.addTelemetry(telemetry);
+        turretSubsystem.addTelemetry(telemetry);
+        telemetry.addData("Turret trim (gp2 dpad L/R)", "%+.1f deg", turretTrimDeg);
         telemetry.addData("Speed offset Pollen (gp2 B clears)", "%+.0f", launcherSubsystem.getPollenOffset());
         telemetry.addData("Flower pickup (gp1 Y)", !flowerMode ? "off"
                 : (intakeSubsystem.isFlowerWaitingForRetract() ? "ON - retracting extender" : "ON - bar down, intaking"));
@@ -263,7 +309,8 @@ public class WholeBotTest extends ModularOpMode {
         telemetry.addData("Transfer mode", transferSubsystem.getMode());   // FULL (launch) / NUDGE / HELD / OFF
         telemetry.addData("Transfer motor / servos", "%.2f / %.2f",
                 transferSubsystem.getMotorCommand(), transferSubsystem.getServoCommand());
-        telemetry.addData("Launch gate", transferShouldRun() ? "FEEDING" : (isFiring() ? "waiting for wheel" : "idle"));
+        telemetry.addData("Launch gate", transferShouldRun() ? "FEEDING"
+                : (!isFiring() ? "idle" : (!wheelReady() ? "waiting for wheel" : "waiting for turret")));
         double distance = transferSubsystem.getDistance();
         if (!Double.isNaN(distance)) {
             telemetry.addData("Distance (cm)", "%.1f", distance);
@@ -276,7 +323,7 @@ public class WholeBotTest extends ModularOpMode {
         }
         double distance2 = transferSubsystem.getDistance2();
         telemetry.addData("Distance2 (cm)", Double.isNaN(distance2) ? "not found" : String.format("%.1f", distance2));
-        telemetry.addLine("gp2 RB/LB: pre-spin on/off | gp2 RT/LT: shoot | dpad up/down: vel +/-20 | B: clear offset");
+        telemetry.addLine("gp2 RB/LB: pre-spin on/off | RT/LT: shoot | dpad up/down: vel +/-20 | dpad L/R: turret trim | X: re-home turret | B: clear offsets");
         telemetry.addData("Reverse step (gp1 RB)", transferSubsystem.isReversing() ? "RUNNING"
                 : String.format("last %d / %d ticks%s", transferSubsystem.getLastReverseTicks(),
                         TransferSubsystem.reverseStepTicks, transferSubsystem.didLastReverseTimeOut() ? " (TIMED OUT)" : ""));
@@ -290,7 +337,8 @@ public class WholeBotTest extends ModularOpMode {
                     + " pollen_target=" + (int) launcherSubsystem.getPollenTargetVelocity());
             lastGateOpen = gateOpen;
         }
-        telemetry.addData("Feed gate", isFiring() ? (gateOpen ? "OPEN" : "waiting for wheel") : (anyWheelSpinning() ? "pre-spinning" : "launcher off"));
+        telemetry.addData("Feed gate", isFiring() ? (gateOpen ? "OPEN" : (!wheelReady() ? "waiting for wheel" : "waiting for turret"))
+                : (anyWheelSpinning() ? "pre-spinning" : "launcher off"));
         LoopProfiler.mark("opmode");   // this OpMode's own controls and telemetry, above
         super.loop();
         LoopProfiler.mark("modules");  // ModularOpMode modules + taskMaster

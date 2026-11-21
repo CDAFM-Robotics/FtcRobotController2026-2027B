@@ -18,10 +18,13 @@ import org.firstinspires.ftc.teamcode.util.PoseStorage.Alliance;
  * We always target the CELL on the robot's half of the field (audience or far side, from the pose); nothing reads the
  * camera and no button selects it.
  *
- * Robot (bot 1.5, Pollen only): the Pollen launcher sits pollenForwardOffset along the robot from the tracking center.
- * The value is still bot 1.0's CAD number (6.148 in behind the center); update it to the turret pivot.
+ * Robot (bot 1.5, Pollen only): the Pollen launcher rides a turret. getTurretTargetDeg() is the turret angle that points
+ * Pollen at the CELL from the turret pivot (turretForwardOffset / turretLeftOffset from the tracking center), in the
+ * TurretSubsystem convention: 0 = straight out the robot's right side, + = counterclockwise. The pivot offsets are
+ * placeholders (bot 1.0's Pollen position) until the bot 1.5 CAD numbers are in. The shot is assumed to leave along
+ * a line through the pivot.
  *
- * Velocity: the base target comes from a table of (distance from the launcher to the CELL ->
+ * Velocity: the base target comes from a table of (distance from the turret pivot to the CELL ->
  * ticks/s), linear between points and flat past the ends (measured Nov 18). Without a known pose the base velocity
  * is NaN and LauncherSubsystem falls back to its fixed default.
  */
@@ -34,8 +37,9 @@ public class AutoAimSubsystem extends Subsystem {
     public static double audienceCellY = 55.0;
     public static double farCellY = 86.5;
 
-    // Pollen launcher position along the robot's forward axis, inches from the tracking center (+ = forward)
-    public static double pollenForwardOffset = -6.148;
+    // Turret pivot position, inches from the tracking center (+ forward, + left). PLACEHOLDER: set from bot 1.5 CAD.
+    public static double turretForwardOffset = -6.148;
+    public static double turretLeftOffset = 0.0;
 
     // Distance (in) -> velocity (ticks/s) table, 5 points, flat past the ends. Edit live in Panels.
     // Measured Nov 18 2026 on bot 1.0 (Red audience CELL); same speed straight or angled. Re-check on bot 1.5.
@@ -68,15 +72,43 @@ public class AutoAimSubsystem extends Subsystem {
     public double getTargetX() { return pose.getAlliance() == Alliance.BLUE ? blueHiveX : redHiveX; }
     public double getTargetY() { return getTargetCell() == CellSide.AUDIENCE ? audienceCellY : farCellY; }
 
-    /** Distance (in) from the launcher at the given forward offset to the CELL, at the robot's current pose. */
-    private double launcherDistance(double forwardOffset) {
+    /** Turret pivot x on the field (in). */
+    private double pivotX() {
         double h = pose.getHeading();
-        double lx = pose.getX() + forwardOffset * Math.cos(h);
-        double ly = pose.getY() + forwardOffset * Math.sin(h);
-        return Math.hypot(getTargetX() - lx, getTargetY() - ly);
+        return pose.getX() + turretForwardOffset * Math.cos(h) - turretLeftOffset * Math.sin(h);
     }
 
-    public double getPollenDistance() { return launcherDistance(pollenForwardOffset); }
+    /** Turret pivot y on the field (in). */
+    private double pivotY() {
+        double h = pose.getHeading();
+        return pose.getY() + turretForwardOffset * Math.sin(h) + turretLeftOffset * Math.cos(h);
+    }
+
+    /** Distance (in) from the turret pivot to the CELL, at the robot's current pose. */
+    public double getPollenDistance() {
+        return Math.hypot(getTargetX() - pivotX(), getTargetY() - pivotY());
+    }
+
+    /**
+     * Turret angle (deg, -180..180) that points Pollen at the CELL; NaN when the pose is not known. The turret's 0
+     * direction on the field is heading - 90 deg (the robot's right side), so turret = bearing - heading + 90.
+     * TurretSubsystem clamps it to its travel; check {@link #isTurretTargetInRange} to know whether it can get there.
+     */
+    public double getTurretTargetDeg() {
+        if (!isAvailable()) return Double.NaN;
+        double bearing = Math.atan2(getTargetY() - pivotY(), getTargetX() - pivotX());
+        double deg = Math.toDegrees(bearing - pose.getHeading()) + 90.0;
+        deg %= 360.0;
+        if (deg > 180) deg -= 360;
+        if (deg <= -180) deg += 360;
+        return deg;
+    }
+
+    /** True when the CELL is within the turret's travel (TurretSubsystem.minAngleDeg .. maxAngleDeg). */
+    public boolean isTurretTargetInRange() {
+        double t = getTurretTargetDeg();
+        return !Double.isNaN(t) && t >= TurretSubsystem.minAngleDeg && t <= TurretSubsystem.maxAngleDeg;
+    }
 
     /** Base Pollen velocity from the table; NaN when the pose is not known (the launcher then uses its default). */
     public double getPollenBaseVelocity() {
@@ -122,6 +154,8 @@ public class AutoAimSubsystem extends Subsystem {
         }
         telemetry.addLine("TARGET: " + cellName() + "  (auto: the CELL on your half of the field)");
         telemetry.addData("Pollen dist / base vel", "%.1f in / %.0f", getPollenDistance(), getPollenBaseVelocity());
+        telemetry.addData("Turret aim", "%.1f deg%s", getTurretTargetDeg(),
+                isTurretTargetInRange() ? "" : "  OUT OF TURRET RANGE - turn the robot");
     }
 
     @Override
