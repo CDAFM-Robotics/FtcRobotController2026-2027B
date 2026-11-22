@@ -30,7 +30,8 @@ public class WholeBotTest extends ModularOpMode {
     private TurretSubsystem turretSubsystem;
 
     // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
-    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. gp2 dpad left/right
+    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. Homing needs the
+    // turret roughly at home (within TurretSubsystem.maxSearchDeg): unwind it to the mark before the match. gp2 dpad left/right
     // trim the aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
     public static double turretTrimStepDeg = 1.0;
     // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).
@@ -203,7 +204,7 @@ public class WholeBotTest extends ModularOpMode {
         if (gamepad2.dpadRightWasPressed()) turretTrimDeg += turretTrimStepDeg;
         if (gamepad2.dpadLeftWasPressed())  turretTrimDeg -= turretTrimStepDeg;
         if (turretAiming()) {
-            turretSubsystem.setTargetDeg(autoAimSubsystem.getTurretTargetDeg() + turretTrimDeg);
+            turretSubsystem.setAimDeg(autoAimSubsystem.getTurretTargetDeg() + turretTrimDeg);   // unwinds when it must
         } else if (turretSubsystem.isHomed() && !turretSubsystem.isHoming()) {
             turretSubsystem.setTargetDeg(TurretSubsystem.homeAngleDeg);
         }
@@ -310,7 +311,7 @@ public class WholeBotTest extends ModularOpMode {
         telemetry.addData("Transfer motor / servos", "%.2f / %.2f",
                 transferSubsystem.getMotorCommand(), transferSubsystem.getServoCommand());
         telemetry.addData("Launch gate", transferShouldRun() ? "FEEDING"
-                : (!isFiring() ? "idle" : (!wheelReady() ? "waiting for wheel" : "waiting for turret")));
+                : (!isFiring() ? "idle" : (!wheelReady() ? "waiting for wheel" : (turretSubsystem.isUnwinding() ? "turret unwinding" : "waiting for turret"))));
         double distance = transferSubsystem.getDistance();
         if (!Double.isNaN(distance)) {
             telemetry.addData("Distance (cm)", "%.1f", distance);

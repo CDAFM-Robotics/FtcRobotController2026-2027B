@@ -92,7 +92,7 @@ public class AutoAimSubsystem extends Subsystem {
     /**
      * Turret angle (deg, -180..180) that points Pollen at the CELL; NaN when the pose is not known. The turret's 0
      * direction on the field is heading - 90 deg (the robot's right side), so turret = bearing - heading + 90.
-     * TurretSubsystem clamps it to its travel; check {@link #isTurretTargetInRange} to know whether it can get there.
+     * Pass it to TurretSubsystem.setAimDeg, which picks the equivalent angle (+/- 360) inside the turret's travel.
      */
     public double getTurretTargetDeg() {
         if (!isAvailable()) return Double.NaN;
@@ -104,10 +104,15 @@ public class AutoAimSubsystem extends Subsystem {
         return deg;
     }
 
-    /** True when the CELL is within the turret's travel (TurretSubsystem.minAngleDeg .. maxAngleDeg). */
+    /** True when some equivalent of the aim angle (+/- k*360) is inside the turret's travel. Always, with >= 360 travel. */
     public boolean isTurretTargetInRange() {
         double t = getTurretTargetDeg();
-        return !Double.isNaN(t) && t >= TurretSubsystem.minAngleDeg && t <= TurretSubsystem.maxAngleDeg;
+        if (Double.isNaN(t)) return false;
+        for (int k = -3; k <= 3; k++) {
+            double c = t + 360.0 * k;
+            if (c >= TurretSubsystem.minAngleDeg && c <= TurretSubsystem.maxAngleDeg) return true;
+        }
+        return false;
     }
 
     /** Base Pollen velocity from the table; NaN when the pose is not known (the launcher then uses its default). */

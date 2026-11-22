@@ -19,7 +19,10 @@ public interface TurretAngleSource {
     /** True once {@link #setHome} has been called (here or in an earlier OpMode, if the source carries it over). */
     boolean isHomed();
 
-    /** Turret angle in degrees (see the convention above). Meaningless until homed. */
+    /**
+     * Turret angle in degrees (see the convention above), continuous (no wrap: two turns = 720). Before homing it is
+     * still continuous but offset by an unknown amount, so it can measure relative motion (homing uses that).
+     */
     double getAngleDeg();
 
     /** Declare that the turret is at {@code turretDeg} right now (called when the Hall sensor trips). */

@@ -19,10 +19,15 @@ import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
  *  3. Angle direction: press X to zero, then stick right - the turret angle must go UP. If not, flip
  *     AxonTurretAngleSource.reversed. Turn the turret 90 deg by hand-measure; the angle should read ~90 (else check gearRatio).
  *  4. Hall sensor: wave the magnet past it; "Hall" must read MAGNET only near it (else flip hallActiveLow).
- *  5. Homing: press A. Set homingDirection so it reaches the magnet the short way, then set homeAngleDeg to the
- *     turret angle at the trip point (0 if the magnet is placed with Pollen pointing straight out the right side).
- *  6. Limits: with the stick, find where wires or hard stops bite; set minAngleDeg / maxAngleDeg a few deg inside.
- *  7. Loop: dpad left/right step the target by stepDeg. Raise kS until small steps move, then kP until it is quick
+ *  5. Home angle: point Pollen exactly straight out the right side, set homeAngleDeg = 0, press X. Move the turret
+ *     with the stick to the side opposite homingDirection, past the magnet, then creep it in homingDirection until
+ *     "Hall" reads MAGNET: the angle shown is the trip point. Repeat, average, put it in homeAngleDeg.
+ *  6. Homing: from roughly home, press A. It sweeps to find the magnet, backs off, and approaches slowly; afterwards
+ *     the angle should read 0 with Pollen straight out the right side. Homing only works when the turret starts
+ *     within maxSearchDeg of home, since the magnet passes the sensor once per turn.
+ *  7. Limits: the wires allow one full turn (-180..180 around home). With the stick, wind it each way until the
+ *     wires get tight; set minAngleDeg / maxAngleDeg a little inside. Keep maxSearchDeg under half of the smaller.
+ *  8. Loop: dpad left/right step the target by stepDeg. Raise kS until small steps move, then kP until it is quick
  *     without overshoot. Y toggles a sweep between -sweepDeg and +sweepDeg to check it repeatably.
  */
 @Configurable
