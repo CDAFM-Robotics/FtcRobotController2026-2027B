@@ -30,8 +30,8 @@ public class WholeBotTest extends ModularOpMode {
     private TurretSubsystem turretSubsystem;
 
     // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
-    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. Homing needs the
-    // turret roughly at home (within TurretSubsystem.maxSearchDeg): unwind it to the mark before the match. gp2 dpad left/right
+    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. Start the program with
+    // the turret in 0..+180 (Pollen pointing anywhere from straight right, through the front, to straight left). gp2 dpad left/right
     // trim the aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
     public static double turretTrimStepDeg = 1.0;
     // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).

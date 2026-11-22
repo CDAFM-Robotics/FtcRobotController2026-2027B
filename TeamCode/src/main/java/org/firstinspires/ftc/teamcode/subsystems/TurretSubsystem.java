@@ -25,16 +25,28 @@ import org.firstinspires.ftc.teamcode.devices.TurretAngleSource;
  * false meanwhile, which holds up firing). The hysteresis stops a target sitting on the seam from swinging it back
  * and forth.
  *
- * Homing: the angle source only measures relative motion, so the turret has to find the Hall sensor. Rule: at
- * power-up the turret must be within maxSearchDeg of home (roughly at home: the drive team turns it to the mark),
- * because the search must not pull the wires past their end. Homing then
- *  1. SEARCH: sweeps +/-search1Deg, then +/-search2Deg, then +/-maxSearchDeg around where it started, at searchPower,
- *     until the Hall sensor trips (the nearest trip is the right one);
+ * Start window: the program always starts with the turret in startWindowCenterDeg +/- 90 (bot 1.5: 0..+180), with
+ * home at the window's edge. That lets the angle source know the angle at startup (absolute start) and tells
+ * homing which way the magnet is.
+ *
+ * Homing (fallback, e.g. before servoDegAtZero is calibrated; the turret must be in the start window):
+ *  1. SEARCH: moves toward home at searchPower, at most across the whole window plus searchMarginDeg, until the
+ *     Hall sensor trips;
  *  2. BACKOFF: moves against homingDirection until the sensor clears, then backoffMarginDeg more;
  *  3. SEEK: moves slowly in homingDirection; the trip point is homeAngleDeg. Always the same edge of the detection
  *     zone, approached from the same side at the same slow speed, so it is repeatable.
- * Soft limits are off while homing (the angle is unknown), which is why the search is kept within maxSearchDeg.
+ * Soft limits are off while homing (the angle is unknown), which is why it only searches toward home and no further.
  * Gives up (FAILED, servo stopped) when the search finds nothing or after homingTimeoutSec.
+ *
+ * Usually no homing motion is needed: the angle source can know the angle at startup (AxonTurretAngleSource absolute
+ * start - the program always starts with the turret in 0..+180 - or a home carried over from Autonomous). Homing
+ * with the Hall sensor is the fallback (gp2 X in TeleOp).
+ *
+ * Hall check: with no hard stop, a wrong angle could wind the wires past their end. The wires allow exactly one turn,
+ * so the magnet passes the sensor at only one spot in the whole travel - home. Every time it trips while moving in
+ * homingDirection the turret IS at homeAngleDeg; if the angle reads more than hallFaultDeg off (a missed servo turn,
+ * an absolute start outside the window), it is corrected on the spot. Smaller differences are only recorded: they
+ * are mostly the sensor being read once per loop while the turret moves, and correcting them would add error.
  *
  * Once homed: power = kP * error + kS (outside the tolerance), capped at maxPower; the servo is never driven further
  * past a travel limit. Every Panels value below is live.
@@ -59,13 +71,13 @@ public class TurretSubsystem extends Subsystem {
     public static double homeAngleDeg = 0;       // turret angle where the Hall sensor trips (approaching as below)
     public static int homingDirection = -1;      // final approach: +1 counterclockwise, -1 clockwise
     public static double homingPower = 0.15;     // final approach, slow for a repeatable trip point
-    public static double searchPower = 0.35;     // search sweeps
-    public static double search1Deg = 30;        // search sweep amplitudes around the start, growing
-    public static double search2Deg = 60;
-    public static double maxSearchDeg = 85;      // the turret must start within this of home; keep 2x under the limits
+    public static double searchPower = 0.35;     // search toward home
+    public static double searchMarginDeg = 5;    // search goes this far beyond the far edge of the start window
+    public static double startWindowCenterDeg = 90;   // the program always starts with the turret within +/- 90 of this
     public static double backoffMarginDeg = 10;  // past the sensor clearing, before the final approach
     public static double homingTimeoutSec = 12.0;
     public static boolean hallActiveLow = true;  // REV magnetic limit switch reads LOW with the magnet present
+    public static double hallFaultDeg = 20;      // Hall check: errors bigger than this at the magnet get corrected
 
     // Flip if positive power turns the turret clockwise (seen from above).
     public static boolean servoReversed = false;
@@ -79,11 +91,13 @@ public class TurretSubsystem extends Subsystem {
     private State state = State.NOT_HOMED;
     private final ElapsedTime homingTimer = new ElapsedTime();
     private double searchStartDeg = 0;
-    private int searchLeg = 0;
     private double backoffClearDeg = Double.NaN;
     private double targetDeg = 0;
     private double manualPower = 0;
     private double power = 0;
+    private boolean prevHall = false;
+    private double lastHallCheckErrDeg = Double.NaN;
+    private int hallCorrections = 0;
 
     /**
      * @param servoName      the Axon (configured as a Continuous Rotation Servo)
@@ -99,7 +113,7 @@ public class TurretSubsystem extends Subsystem {
 
     // ---- Commands ----
 
-    /** Find the Hall sensor (re-homes even if already homed). The turret must be within maxSearchDeg of home. */
+    /** Find the Hall sensor (re-homes even if already homed). The turret must be in the start window. */
     public void startHoming() {
         if (servo == null || !angle.isConnected() || homeSensor == null) {
             state = State.FAILED;
@@ -112,7 +126,6 @@ public class TurretSubsystem extends Subsystem {
             state = State.HOMING_BACKOFF;
         } else {
             searchStartDeg = angle.getAngleDeg();
-            searchLeg = 0;
             state = State.HOMING_SEARCH;
         }
     }
@@ -172,6 +185,10 @@ public class TurretSubsystem extends Subsystem {
     public double getErrorDeg() { return targetDeg - getAngleDeg(); }
     public double getPower() { return power; }
     public boolean isHomeSensorConfigured() { return homeSensor != null; }
+    /** Angle error at the last Hall check (deg), NaN before the first. */
+    public double getLastHallCheckErrDeg() { return lastHallCheckErrDeg; }
+    /** How many times the Hall check has corrected the angle this OpMode. */
+    public int getHallCorrections() { return hallCorrections; }
 
     /** Homed, holding a target, and within toleranceDeg of it. */
     public boolean isOnTarget() {
@@ -204,12 +221,11 @@ public class TurretSubsystem extends Subsystem {
     @Override
     public void start() { }
 
-    /** Search legs: +s1, -s1, +s2, -s2, +max, -max (relative to the start); NaN when the search is over. */
-    private double searchLegOffset(int leg) {
-        double[] amps = {search1Deg, search2Deg, maxSearchDeg};
-        if (leg >= 2 * amps.length) return Double.NaN;
-        double a = Math.min(amps[leg / 2], maxSearchDeg);
-        return (leg % 2 == 0) ? a : -a;
+    /** Search move relative to the start: toward home, as far as home can be from anywhere in the start window. */
+    private double searchOffset() {
+        double dir = Math.signum(homeAngleDeg - startWindowCenterDeg);
+        if (dir == 0) dir = homingDirection;
+        return dir * (Math.abs(homeAngleDeg - startWindowCenterDeg) + 90 + searchMarginDeg);
     }
 
     private double updateHoming() {
@@ -222,13 +238,9 @@ public class TurretSubsystem extends Subsystem {
                     state = State.HOMING_BACKOFF;
                     return 0;
                 }
-                double off = searchLegOffset(searchLeg);
-                if (Double.isNaN(off)) { state = State.FAILED; return 0; }   // nothing within maxSearchDeg
-                double legTarget = searchStartDeg + off;
-                if ((off > 0 && a >= legTarget) || (off < 0 && a <= legTarget)) {
-                    searchLeg++;
-                    return 0;
-                }
+                double off = searchOffset();
+                double end = searchStartDeg + off;
+                if ((off > 0 && a >= end) || (off < 0 && a <= end)) { state = State.FAILED; return 0; }   // no magnet
                 return Math.signum(off) * searchPower;
             }
             case HOMING_BACKOFF:
@@ -252,10 +264,24 @@ public class TurretSubsystem extends Subsystem {
         }
     }
 
+    /** See class comment. Runs before this loop's power is chosen; power still holds last loop's command. */
+    private void hallCheck() {
+        boolean hall = isAtHomeSensor();
+        if (hall && !prevHall && angle.isHomed() && !isHoming() && Math.signum(power) == homingDirection) {
+            lastHallCheckErrDeg = angle.getAngleDeg() - homeAngleDeg;
+            if (Math.abs(lastHallCheckErrDeg) > hallFaultDeg) {
+                angle.setHome(homeAngleDeg);   // the magnet is only at home: trust it over the count
+                hallCorrections++;
+            }
+        }
+        prevHall = hall;
+    }
+
     @Override
     public void update() {
         angle.update();
-        if (state == State.NOT_HOMED && angle.isHomed()) state = State.READY;   // carried over from an earlier OpMode
+        if (state == State.NOT_HOMED && angle.isHomed()) state = State.READY;   // absolute start / earlier OpMode
+        hallCheck();
 
         double p = 0;
         switch (state) {
@@ -300,9 +326,12 @@ public class TurretSubsystem extends Subsystem {
         if (servo == null) { telemetry.addLine("TURRET: servo not in configuration"); return; }
         if (!angle.isConnected()) { telemetry.addLine("TURRET: angle sensor not in configuration"); return; }
         String where;
-        if (!angle.isHomed()) where = state == State.FAILED ? "HOMING FAILED (unwind to the mark, gp2 X)" : "not homed";
+        if (!angle.isHomed()) where = state == State.FAILED ? "HOMING FAILED (turn into 0..+180, gp2 X)" : "not homed";
         else where = String.format("%.1f deg -> %.1f%s", angle.getAngleDeg(), targetDeg,
                 isOnTarget() ? " ON TARGET" : (isUnwinding() ? " UNWINDING" : ""));
         telemetry.addData("Turret", "%s  [%s]", where, state);
+        if (hallCorrections > 0) {
+            telemetry.addData("Turret Hall corrections", "%d (last %.0f deg) - check the feedback wire", hallCorrections, lastHallCheckErrDeg);
+        }
     }
 }

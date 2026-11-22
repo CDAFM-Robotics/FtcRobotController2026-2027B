@@ -4,6 +4,8 @@ import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 
+import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
+
 /**
  * Turret angle from the Axon servo's analog feedback wire.
  *
@@ -13,9 +15,15 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
  * wrapped to -180..180, to a running total. That stays correct as long as the servo moves less than 180 deg between
  * two loops (an Axon at full speed does ~10 deg per 20 ms loop, so only a long stall could break it).
  *
- * The total only means something relative to a known point, so the turret must be homed (Hall sensor) before use.
- * The home is kept in static fields so the next OpMode (Autonomous -> TeleOp) carries it over, provided the turret
- * moved less than 90 deg (180 servo deg) in between - normally it does not move at all.
+ * The total only means something relative to a known point. At the first reading the home comes from, in order:
+ *  1. the previous OpMode (Autonomous -> TeleOp): kept in static fields, valid if the turret moved less than 90 deg
+ *     (180 servo deg) in between - normally it does not move at all;
+ *  2. ABSOLUTE START: the program always starts with the turret inside one 180 deg window of travel
+ *     (TurretSubsystem.startWindowCenterDeg +/- 90; bot 1.5 starts in 0..+180). 180 turret deg is exactly one servo turn, so inside
+ *     that window each reading belongs to exactly one turret angle. Needs servoDegAtZero (the servo reading with the
+ *     turret at 0), shown by Turret Calibration once homed. If the turret starts OUTSIDE the window the angle is off
+ *     by 180 - TurretSubsystem's Hall check corrects that the next time the turret passes the magnet;
+ *  3. otherwise not homed: TurretSubsystem homes with the Hall sensor.
  *
  * Accuracy: this measures the servo, so backlash between the 40T and 80T gears shows up as aim error. A Through Bore
  * encoder on the turret itself removes that.
@@ -31,6 +39,8 @@ public class AxonTurretAngleSource implements TurretAngleSource {
     public static double gearRatio = 2.0;
     // Flip if the turret angle goes DOWN while the turret turns counterclockwise (seen from above).
     public static boolean reversed = false;
+    // Absolute start (see class comment). servoDegAtZero: copy from Turret Calibration; NaN turns absolute start off.
+    public static double servoDegAtZero = Double.NaN;
 
     // Carried across OpModes (see class comment).
     private static boolean storedHomed = false;
@@ -47,6 +57,7 @@ public class AxonTurretAngleSource implements TurretAngleSource {
     private double homeServoTotalDeg = 0;
     private double homeTurretDeg = 0;
     private boolean carriedOver = false;
+    private boolean absoluteStart = false;
     private double voltage = Double.NaN;
 
     public AxonTurretAngleSource(HardwareMap hardwareMap, String signalName) {
@@ -67,6 +78,28 @@ public class AxonTurretAngleSource implements TurretAngleSource {
 
     /** True when the home came from an earlier OpMode rather than homing in this one. */
     public boolean isCarriedOver() { return carriedOver; }
+
+    /** True when the angle came from the absolute start (no homing motion) and has not been re-homed since. */
+    public boolean isAbsoluteStart() { return absoluteStart; }
+
+    /** servoDegAtZero implied by the current home (0..360): copy it into the code. NaN until homed. */
+    public double getServoDegAtZeroEstimate() {
+        if (!homed) return Double.NaN;
+        double sign = reversed ? -1 : 1;
+        double z = (servoTotalDeg - sign * gearRatio * getAngleDeg()) % 360.0;
+        return z < 0 ? z + 360.0 : z;
+    }
+
+    /** Turret angle for this servo reading, inside the start window (one servo turn = 360 / gearRatio turret deg). */
+    private double absoluteAngle(double servoDeg) {
+        double sign = reversed ? -1 : 1;
+        double width = 360.0 / gearRatio;
+        double base = sign * (servoDeg - servoDegAtZero) / gearRatio;
+        double lo = TurretSubsystem.startWindowCenterDeg - width / 2;
+        double m = (base - lo) % width;
+        if (m < 0) m += width;
+        return lo + m;
+    }
 
     private double readServoDeg() {
         voltage = signal.getVoltage();
@@ -98,6 +131,10 @@ public class AxonTurretAngleSource implements TurretAngleSource {
                 carriedOver = true;
             } else {
                 servoTotalDeg = now;
+                if (!Double.isNaN(servoDegAtZero)) {
+                    setHome(absoluteAngle(now));
+                    absoluteStart = true;
+                }
             }
         } else {
             servoTotalDeg += wrap180(now - lastServoDeg);
@@ -121,6 +158,7 @@ public class AxonTurretAngleSource implements TurretAngleSource {
         homeTurretDeg = turretDeg;
         homed = true;
         carriedOver = false;
+        absoluteStart = false;
         storedHomed = true;
         storedHomeServoTotalDeg = homeServoTotalDeg;
         storedHomeTurretDeg = homeTurretDeg;
@@ -130,6 +168,7 @@ public class AxonTurretAngleSource implements TurretAngleSource {
     public void clearHome() {
         homed = false;
         carriedOver = false;
+        absoluteStart = false;
         storedHomed = false;
     }
 }
