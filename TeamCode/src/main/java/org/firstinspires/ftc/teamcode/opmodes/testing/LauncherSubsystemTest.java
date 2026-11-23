@@ -12,7 +12,7 @@ import org.firstinspires.ftc.teamcode.subsystems.LauncherSubsystem;
  * gp1 RB: flywheel on/off. gp1 dpad up/down: target speed +/-20 ticks/s. gp1 B: clear the offset.
  * Gains (kS, kV, kP, kI) are live in Panels under LauncherSubsystem; the velocity graph is on Panels too.
  */
-@TeleOp(name = "Launcher Subsystem Test", group = "Testing")
+@TeleOp(name = "Launcher Pollen only Subsystem Test", group = "Testing")
 public class LauncherSubsystemTest extends ModularOpMode {
 
     private LauncherSubsystem launcherSubsystem;
