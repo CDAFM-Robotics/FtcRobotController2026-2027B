@@ -17,7 +17,7 @@ public class TransferSubsystemTest extends ModularOpMode {
 
     @Override
     protected void preload() {
-        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
+        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "pollenGateServo");
 
         transferSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.left_bumper);
 

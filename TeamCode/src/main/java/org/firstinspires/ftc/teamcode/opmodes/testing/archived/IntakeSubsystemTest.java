@@ -1,19 +1,15 @@
-package org.firstinspires.ftc.teamcode.opmodes.testing;
+package org.firstinspires.ftc.teamcode.opmodes.testing.archived;
 
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 
 import com.bylazar.configurables.annotations.Configurable;
-import com.bylazar.panels.Panels;
 import com.bylazar.telemetry.PanelsTelemetry;
 import com.bylazar.telemetry.TelemetryManager;
 import com.cdarobotics.cdalib.opmodes.ModularOpMode;
-import com.outoftheboxrobotics.photoncore.Photon;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.TransferSubsystem;
-
-import java.util.function.DoubleSupplier;
 
 @Configurable
 @Disabled   // Nov 20: hidden for competition; remove this line to use it
@@ -50,7 +46,7 @@ public class IntakeSubsystemTest extends ModularOpMode {
 
         registerSubsystem(intakeSubsystem);
 
-        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
+        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "pollenGateServo");
 
         transferSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper || gamepad2.circle, () -> gamepad2.circle);
 

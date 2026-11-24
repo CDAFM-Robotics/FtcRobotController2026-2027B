@@ -86,7 +86,7 @@ public class WholeBotTest extends ModularOpMode {
         registerSubsystem(launcherSubsystem);
 
         transferSubsystem = new TransferSubsystem(
-                hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
+                hardwareMap, "transferMotor", "pollenGateServo");
         transferSubsystem.setBindings(bindingManager,
                 this::transferCommanded,     // servos: full power for launching and for nudging (unchanged)
                 this::transferShouldRun);    // motor: transferMotorPower (1.0) only while launching; no dpad stepping

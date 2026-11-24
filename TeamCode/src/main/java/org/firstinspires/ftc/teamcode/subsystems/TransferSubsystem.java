@@ -5,6 +5,7 @@ import android.util.Log;
 import com.cdarobotics.cdalib.bindings.BindingManager;
 import com.cdarobotics.cdalib.devices.actuators.CRServoDevice;
 import com.cdarobotics.cdalib.devices.actuators.MotorDevice;
+import com.cdarobotics.cdalib.devices.actuators.ServoDevice;
 import com.cdarobotics.cdalib.devices.sensors.RevColorSensorV3Device;
 import com.cdarobotics.cdalib.subsystems.Subsystem;
 import com.qualcomm.hardware.lynx.LynxI2cDeviceSynch;
@@ -29,6 +30,10 @@ public class TransferSubsystem extends Subsystem {
     public static boolean colorSensorFast400k = true;
 
     private static final double TRANSFER_POWER_STEP = 0.1;
+
+    public static final double POLLEN_GATE_POSITION_OPEN = 0.25;
+    public static final double POLLEN_GATE_POSITION_CLOSED = 0.0;
+
     // Feed power. All three are Panels fields and are read every loop, so an edit in Panels takes effect at once.
     // The 5-argument setBindings can also step transferMotorPower by 0.1 from buttons; no OpMode uses it now
     // (WholeBotTest dropped its gp2 dpad left/right stepping on Nov 13: the servos were seen running while the motor was not, and a lowered transferMotorPower is the suspected cause).
@@ -47,8 +52,8 @@ public class TransferSubsystem extends Subsystem {
     public static double reverseStepTimeoutSec = 0.5; // safety stop if the encoder doesn't reach the count (jam, unplugged)
 
     private final MotorDevice transferMotor;
-    private final CRServoDevice leftTransferServo;
-    private final CRServoDevice rightTransferServo;
+
+    private final ServoDevice pollenGateServo;
     // Both sensors go through CDALib's RevColorSensorV3Device: one 14-byte I2C read per sensor per loop in update(),
     // after which distance and colour are cached. The stock NormalizedColorSensor/DistanceSensor path cost one I2C
     // transaction per getDistance()/getNormalizedColors() call, and this subsystem was issuing up to eleven per loop.
@@ -90,6 +95,31 @@ public class TransferSubsystem extends Subsystem {
     private boolean lastReverseTimedOut = false;
     private final com.qualcomm.robotcore.util.ElapsedTime reverseTimer = new com.qualcomm.robotcore.util.ElapsedTime();
 
+
+    public TransferSubsystem(HardwareMap hardwareMap, String transferMotorName, String pollenGateServoName){
+        transferMotor = new MotorDevice(hardwareMap, transferMotorName);
+        transferMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
+
+        pollenGateServo = new ServoDevice(hardwareMap, pollenGateServoName);
+
+
+        RevColorSensorV3 cs1 = hardwareMap.tryGet(RevColorSensorV3.class, "colorSensor1");
+        colorSensor1 = (cs1 == null) ? null : new RevColorSensorV3Device(cs1).setGain(10);
+
+        RevColorSensorV3 cs2 = hardwareMap.tryGet(RevColorSensorV3.class, "colorSensor2");
+        colorSensor2 = (cs2 == null) ? null : new RevColorSensorV3Device(cs2);
+
+        RevColorSensorV3 top = hardwareMap.tryGet(RevColorSensorV3.class, "topTransferSensor");
+        topSensor = (top == null) ? null : new RevColorSensorV3Device(top);
+
+        if (colorSensorFast400k) {
+            setBusSpeed400k(cs1);
+            setBusSpeed400k(cs2);
+            setBusSpeed400k(top);
+        }
+    }
+
     /** Start one reverse step (one ball space). Ignored if one is already running. */
     public void startReverseStep() {
         if (reversing) return;
@@ -107,25 +137,7 @@ public class TransferSubsystem extends Subsystem {
     /** @return true if the auto-nudge was being held back on the last update(). */
     public boolean isFeedHeld() { return lastHold; }
 
-    public TransferSubsystem(HardwareMap hardwareMap, String transferMotorName, String leftTransferServoName, String rightTransferServoName){
-        transferMotor = new MotorDevice(hardwareMap, transferMotorName);
-        leftTransferServo = new CRServoDevice(hardwareMap, leftTransferServoName);
-        rightTransferServo = new CRServoDevice(hardwareMap, rightTransferServoName);
-        RevColorSensorV3 cs1 = hardwareMap.tryGet(RevColorSensorV3.class, "colorSensor1");
-        colorSensor1 = (cs1 == null) ? null : new RevColorSensorV3Device(cs1).setGain(10);
 
-        RevColorSensorV3 cs2 = hardwareMap.tryGet(RevColorSensorV3.class, "colorSensor2");
-        colorSensor2 = (cs2 == null) ? null : new RevColorSensorV3Device(cs2);
-
-        RevColorSensorV3 top = hardwareMap.tryGet(RevColorSensorV3.class, "topTransferSensor");
-        topSensor = (top == null) ? null : new RevColorSensorV3Device(top);
-
-        if (colorSensorFast400k) {
-            setBusSpeed400k(cs1);
-            setBusSpeed400k(cs2);
-            setBusSpeed400k(top);
-        }
-    }
 
     private static void setBusSpeed400k(RevColorSensorV3 sensor) {
         if (sensor == null) return;
@@ -176,17 +188,17 @@ public class TransferSubsystem extends Subsystem {
         return colorSensor1.getColors();
     }
 
-    public void setBindings(BindingManager bindingManager, BooleanSupplier transferServo, BooleanSupplier transferMotor) {
-        bindingManager.addBinding("transferServo", transferServo);
+    public void setBindings(BindingManager bindingManager, BooleanSupplier transferMotor, BooleanSupplier pollenGate) {
         bindingManager.addBinding("transferMotor", transferMotor);
+        bindingManager.addBinding("pollenGate", pollenGate);
         bindingManager.addBinding("increaseTransferPower", () -> false);
         bindingManager.addBinding("decreaseTransferPower", () -> false);
         this.bindingManager = bindingManager;
     }
 
-    public void setBindings(BindingManager bindingManager, BooleanSupplier transferServo, BooleanSupplier transferMotor, BooleanSupplier increaseTransferPower, BooleanSupplier decreaseTransferPower) {
-        bindingManager.addBinding("transferServo", transferServo);
+    public void setBindings(BindingManager bindingManager, BooleanSupplier transferMotor, BooleanSupplier pollenGate, BooleanSupplier increaseTransferPower, BooleanSupplier decreaseTransferPower) {
         bindingManager.addBinding("transferMotor", transferMotor);
+        bindingManager.addBinding("pollenGate", pollenGate);
         bindingManager.addBinding("increaseTransferPower", increaseTransferPower);
         bindingManager.addBinding("decreaseTransferPower", decreaseTransferPower);
         this.bindingManager = bindingManager;
@@ -209,10 +221,7 @@ public class TransferSubsystem extends Subsystem {
 
     @Override
     public void init() {
-        transferMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         // BRAKE so a queued ball stops when the feed gate closes instead of coasting on into the flywheel.
-        transferMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        rightTransferServo.setDirection(DcMotorSimple.Direction.REVERSE);
     }
 
     @Override
@@ -259,31 +268,36 @@ public class TransferSubsystem extends Subsystem {
                 lastReverseTimedOut = timedOut && moved < reverseStepTicks;
             }
         }
+
+        if (bindingManager.checkBinding("pollenGate")) {
+            pollenGateServo.setPosition(POLLEN_GATE_POSITION_OPEN);
+        }
+        else {
+            pollenGateServo.setPosition(POLLEN_GATE_POSITION_CLOSED);
+        }
+
+
         boolean reverse = reversing;
 
         double motorCmd = manualRun ? transferMotorPower : (reverse ? -reverseNudgePower : (elementDetected ? autoNudgePower : 0));
-        boolean servoRun = bindingManager.checkBinding("transferServo");
-        double servoCmd = reverse ? 0 : (servoRun ? transferServoPower : (elementDetected ? autoNudgePower : 0));
 
         transferMotor.setPower(motorCmd);
-        leftTransferServo.setPower(servoCmd);
-        rightTransferServo.setPower(servoCmd);
 
         boolean ballSeen = hasGameElement() || nudgeRequest.getAsBoolean();
         lastMode = manualRun ? Mode.FULL : (reverse ? Mode.REVERSE
                 : (elementDetected ? Mode.NUDGE : ((hold && ballSeen) ? Mode.HELD : Mode.OFF)));
         lastMotorCmd = motorCmd;
-        lastServoCmd = servoCmd;
-        if (lastMode != loggedMode || motorCmd != loggedMotor || servoCmd != loggedServo) {
-            Log.d("TransferState", String.format("t_ms=%d mode=%s motor=%.2f servo=%.2f ball=%d hold=%d",
-                    System.nanoTime() / 1_000_000L, lastMode, motorCmd, servoCmd, hasGameElement() ? 1 : 0, hold ? 1 : 0));
-            loggedMode = lastMode; loggedMotor = motorCmd; loggedServo = servoCmd;
+        if (lastMode != loggedMode || motorCmd != loggedMotor) {
+            Log.d("TransferState", String.format("t_ms=%d mode=%s motor=%.2f ball=%d hold=%d gate=%d",
+                    System.nanoTime() / 1_000_000L, lastMode, motorCmd, hasGameElement() ? 1 : 0, hold ? 1 : 0, bindingManager.checkBinding("pollenGate") ? 0 : 1));
+            loggedMode = lastMode;
+            loggedMotor = motorCmd;
         }
 
         transferMotor.update();
 
-        leftTransferServo.update();
-        rightTransferServo.update();
+        pollenGateServo.update();
+
         LoopProfiler.mark("transfer");
     }
 

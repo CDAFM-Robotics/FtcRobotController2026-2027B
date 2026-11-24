@@ -37,7 +37,7 @@ public class RedGardenPushAutonomous extends ModularOpMode {
         follower.setPose(Paths.POSE_SHOOT_RED_GARDEN);   // re-applied in start() after the Pinpoint IMU recalibration
 
         intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
-        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "leftTransferServo", "rightTransferServo");
+        transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "pollenGateServo");
         launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
 
         // Auto-aim reads the Follower pose and feeds the launcher a distance-based velocity; +90 over the table because
