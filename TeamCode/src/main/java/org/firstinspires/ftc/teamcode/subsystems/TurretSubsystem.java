@@ -3,6 +3,7 @@ package org.firstinspires.ftc.teamcode.subsystems;
 import com.bylazar.configurables.annotations.Configurable;
 import com.cdarobotics.cdalib.subsystems.Subsystem;
 import com.qualcomm.robotcore.hardware.CRServo;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -105,7 +106,9 @@ public class TurretSubsystem extends Subsystem {
      * @param angle          where the turret angle comes from
      */
     public TurretSubsystem(HardwareMap hardwareMap, String servoName, String homeSensorName, TurretAngleSource angle) {
-        servo = hardwareMap.tryGet(CRServo.class, servoName);
+        servo = hardwareMap.get(CRServo.class, servoName);
+        servo.setDirection(DcMotorSimple.Direction.REVERSE);
+
         homeSensor = hardwareMap.tryGet(DigitalChannel.class, homeSensorName);
         if (homeSensor != null) homeSensor.setMode(DigitalChannel.Mode.INPUT);
         this.angle = angle;

@@ -247,6 +247,8 @@ public class TransferSubsystem extends Subsystem {
 
         boolean increaseNow = bindingManager.checkBinding("increaseTransferPower");
         boolean decreaseNow = bindingManager.checkBinding("decreaseTransferPower");
+
+
         if (increaseNow && !prevIncreaseTransferPower)
             transferMotorPower = Math.min(1.0, transferMotorPower + TRANSFER_POWER_STEP);
         if (decreaseNow && !prevDecreaseTransferPower)

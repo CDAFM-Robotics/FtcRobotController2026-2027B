@@ -63,9 +63,14 @@ public class IntakeSubsystem extends Subsystem {
     private boolean useAnalogIntake = false;
 
     // Servo position constants — DO NOT CHANGE
+
+    // Left Servo: Positive to extend
+
     public static final double POSITION_EXTENSION_SERVO_INIT_LEFT      = 0.505;
     public static final double POSITION_EXTENSION_SERVO_RETRACTED_LEFT = 0.525;
     public static final double POSITION_EXTENSION_SERVO_EXTENDED_LEFT  = 0.505 + 0.173;
+
+    // Right Servo: Negative to extend
 
     public static final double POSITION_EXTENSION_SERVO_INIT_RIGHT      = 0.495;
     public static final double POSITION_EXTENSION_SERVO_RETRACTED_RIGHT = 0.475;
