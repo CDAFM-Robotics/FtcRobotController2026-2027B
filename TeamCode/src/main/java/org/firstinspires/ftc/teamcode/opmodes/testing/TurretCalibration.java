@@ -52,7 +52,7 @@ public class TurretCalibration extends ModularOpMode {
 
     @Override
     protected void preload() {
-        angle = new AxonTurretAngleSource(hardwareMap, "turretServoSignal");
+        angle = new AxonTurretAngleSource(hardwareMap, "pollenLauncherSensor");
         turret = new TurretSubsystem(hardwareMap, "pollenLauncherServo", "pollenLauncherServoVoltage", angle);
         registerSubsystem(turret);
     }
