@@ -8,8 +8,6 @@ import com.cdarobotics.cdalib.subsystems.Subsystem;
 import com.qualcomm.robotcore.hardware.AnalogInput;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.qualcomm.robotcore.hardware.NormalizedColorSensor;
-import com.qualcomm.robotcore.hardware.NormalizedRGBA;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import org.firstinspires.ftc.teamcode.util.LoopProfiler;
@@ -23,13 +21,13 @@ import java.util.function.DoubleSupplier;
 public class IntakeSubsystem extends Subsystem {
 
     // --- Flower bar ---
-    // A goBILDA Speed servo ("flowerBarServo", Control Hub servo port 5) swings a bar down to push Pollen out of the
+    // A goBILDA Speed servo ("wedgeServo", Control Hub servo port 5) swings a bar down to push Pollen out of the
     // Flower so the intake can pick them up. Optional: if the servo is not in the configuration, Flower pickup does
     // nothing and the rest of the intake works as before. Higher position = further down; the up hard stop is near 0.30.
-    public static double flowerBarUpPosition   = 0.47;   // measured Nov 14 with FlowerBarServoTest
-    public static double flowerBarDownPosition = 1.00;   // measured Nov 14
-    public static int    flowerBarMoveMs       = 400;    // down -> up travel; extender stays in this long after a raise
-    public static double flowerIntakePower     = 1.0;    // intake power while the bar is down (0.75 felt slow, Nov 14)
+    public static final double POSITION_SERVO_WEDGE_UP = 0.15;   // measured Nov 14 with WedgeServoTest
+    public static final double POSITION_SERVO_WEDGE_DOWN = 0.5;   // measured Nov 14
+    public static int wedgeMoveMs = 400;    // down -> up travel; extender stays in this long after a raise
+    public static double flowerIntakePower = 1.0;    // intake power while the bar is down (0.75 felt slow, Nov 14)
     public static double flowerIntakeStopDelaySec = 0.5; // intake keeps running this long after the raise starts
 
     private final MotorDevice intakeMotor;
@@ -66,15 +64,15 @@ public class IntakeSubsystem extends Subsystem {
 
     // Left Servo: Positive to extend
 
-    public static final double POSITION_EXTENSION_SERVO_INIT_LEFT      = 0.505;
-    public static final double POSITION_EXTENSION_SERVO_RETRACTED_LEFT = 0.525;
-    public static final double POSITION_EXTENSION_SERVO_EXTENDED_LEFT  = 0.505 + 0.173;
+    public static final double POSITION_EXTENSION_SERVO_INIT_LEFT = 0.48;
+    public static final double POSITION_EXTENSION_SERVO_RETRACTED_LEFT = 0.505;
+    public static final double POSITION_EXTENSION_SERVO_EXTENDED_LEFT = 0.585;
 
     // Right Servo: Negative to extend
 
-    public static final double POSITION_EXTENSION_SERVO_INIT_RIGHT      = 0.495;
-    public static final double POSITION_EXTENSION_SERVO_RETRACTED_RIGHT = 0.475;
-    public static final double POSITION_EXTENSION_SERVO_EXTENDED_RIGHT  = 0.495 - 0.173;
+    public static final double POSITION_EXTENSION_SERVO_INIT_RIGHT = 0.485;
+    public static final double POSITION_EXTENSION_SERVO_RETRACTED_RIGHT = 0.46;
+    public static final double POSITION_EXTENSION_SERVO_EXTENDED_RIGHT = 0.38;
 
     // Smooth ramp: fast step far from target, slow step near target
     private static final double SERVO_STEP_FAST  = 0.010; // per loop iteration
@@ -98,22 +96,20 @@ public class IntakeSubsystem extends Subsystem {
     private double retractCorrL = 0;
     private double retractCorrR = 0;
 
-    private final Servo flowerBarServo;            // null if not configured
+    private final ServoDevice wedgeServo;            // null if not configured
     private boolean flowerBound = false;           // setFlowerBinding() called
-    private boolean flowerBarDown = false;         // bar commanded down
+    private boolean wedgeDown = false;         // bar commanded down
     private boolean flowerRaisedOnce = false;      // a raise has happened (so the stop-delay tail can run)
     private final ElapsedTime sinceFlowerRaise = new ElapsedTime();
 
-    public IntakeSubsystem(HardwareMap hardwareMap, Telemetry telemetry,
-                           String intakeMotorName,
-                           String leftExtenderServoName,
-                           String rightExtenderServoName) {
-        intakeMotor        = new MotorDevice(hardwareMap, intakeMotorName);
-        leftExtenderServo  = new ServoDevice(hardwareMap, leftExtenderServoName);
+    public IntakeSubsystem(HardwareMap hardwareMap, Telemetry telemetry, String intakeMotorName, String leftExtenderServoName, String rightExtenderServoName, String wedgeServoName) {
+        intakeMotor = new MotorDevice(hardwareMap, intakeMotorName);
+        leftExtenderServo = new ServoDevice(hardwareMap, leftExtenderServoName);
         rightExtenderServo = new ServoDevice(hardwareMap, rightExtenderServoName);
+        wedgeServo = new ServoDevice(hardwareMap, wedgeServoName);
         leftFeedback  = hardwareMap.tryGet(AnalogInput.class, "intakeLeftServoSignal");
         rightFeedback = hardwareMap.tryGet(AnalogInput.class, "intakeRightServoSignal");
-        flowerBarServo = hardwareMap.tryGet(Servo.class, "flowerBarServo");
+        
         this.telemetry = telemetry;
     }
 
@@ -128,17 +124,17 @@ public class IntakeSubsystem extends Subsystem {
         flowerBound = true;
     }
 
-    public boolean isFlowerBarConfigured() { return flowerBarServo != null; }
-    public boolean isFlowerBarDown()       { return flowerBarDown; }
+    public boolean isWedgeConfigured() { return wedgeServo != null; }
+    public boolean isWedgeDown()       { return wedgeDown; }
 
     /** Flower pickup requested but the bar is still up, waiting for the extender to retract. */
     public boolean isFlowerWaitingForRetract() {
-        return flowerBound && bindingManager.checkBinding("flowerPickup") && !flowerBarDown && flowerBarServo != null;
+        return flowerBound && bindingManager.checkBinding("flowerPickup") && !wedgeDown && wedgeServo != null;
     }
 
-    /** Bar is up and has had flowerBarMoveMs to get there since the last raise. */
-    public boolean isFlowerBarUp() {
-        return !flowerBarDown && (!flowerRaisedOnce || sinceFlowerRaise.milliseconds() >= flowerBarMoveMs);
+    /** Bar is up and has had wedgeMoveMs to get there since the last raise. */
+    public boolean isWedgeUp() {
+        return !wedgeDown && (!flowerRaisedOnce || sinceFlowerRaise.milliseconds() >= wedgeMoveMs);
     }
 
     public void setBindings(BindingManager bindingManager, BooleanSupplier intake, BooleanSupplier extender) {
@@ -234,9 +230,10 @@ public class IntakeSubsystem extends Subsystem {
         leftExtenderServo.update();
         rightExtenderServo.update();
         // Bar up at init.
-        flowerBarDown = false;
+        wedgeDown = false;
         flowerRaisedOnce = false;
-        if (flowerBarServo != null) flowerBarServo.setPosition(flowerBarUpPosition);
+        wedgeServo.setPosition(POSITION_SERVO_WEDGE_UP);
+        wedgeServo.update();
     }
 
     @Override public void init_loop() {}
@@ -248,17 +245,17 @@ public class IntakeSubsystem extends Subsystem {
 
         // Flower bar: lower only once the extender is retracted; raise as soon as pickup is no longer requested.
         boolean flowerWanted = flowerBound && bindingManager.checkBinding("flowerPickup");
-        if (flowerWanted && !flowerBarDown && flowerBarServo != null && isRetracted()) {
-            flowerBarDown = true;
-        } else if (!flowerWanted && flowerBarDown) {
-            flowerBarDown = false;
+        if (flowerWanted && !wedgeDown && wedgeServo != null && isRetracted()) {
+            wedgeDown = true;
+        } else if (!flowerWanted && wedgeDown) {
+            wedgeDown = false;
             flowerRaisedOnce = true;
             sinceFlowerRaise.reset();
         }
-        if (flowerBarServo != null) {
-            flowerBarServo.setPosition(flowerBarDown ? flowerBarDownPosition : flowerBarUpPosition);
-        }
-        boolean flowerIntakeOn = flowerBarDown
+
+            wedgeServo.setPosition(wedgeDown ? POSITION_SERVO_WEDGE_DOWN : POSITION_SERVO_WEDGE_UP);
+
+        boolean flowerIntakeOn = wedgeDown
                 || (flowerRaisedOnce && sinceFlowerRaise.seconds() < flowerIntakeStopDelaySec);
 
         // Intake motor: the driver's binding wins whenever it asks for anything; otherwise Flower pickup runs it.
@@ -273,7 +270,7 @@ public class IntakeSubsystem extends Subsystem {
         // Smooth servo ramp toward target. Interlock: the extender stays retracted while Flower pickup is requested
         // (this is what retracts it before the bar lowers), while the bar is down, and while the bar is still rising.
         boolean extend = bindingManager.checkBinding("extendIntake")
-                && !flowerWanted && isFlowerBarUp();
+                && !flowerWanted && isWedgeUp();
         if (extend) {
             retractCorrL = 0;
             retractCorrR = 0;
@@ -310,6 +307,7 @@ public class IntakeSubsystem extends Subsystem {
         intakeMotor.update();
         leftExtenderServo.update();
         rightExtenderServo.update();
+        wedgeServo.update();
         LoopProfiler.mark("intake");
     }
 

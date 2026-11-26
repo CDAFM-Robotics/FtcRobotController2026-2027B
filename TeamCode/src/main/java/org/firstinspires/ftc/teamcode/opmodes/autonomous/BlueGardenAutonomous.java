@@ -35,7 +35,7 @@ public class BlueGardenAutonomous extends ModularOpMode {
         follower = Constants.createFollower(hardwareMap);
         follower.setPose(Paths.POSE_SHOOT_BLUE_NEAR);   // re-applied in start() after the Pinpoint IMU recalibration
 
-        intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
+        intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
         transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "pollenGateServo");
         launcherSubsystem = new LauncherSubsystem(hardwareMap, telemetry, "pollenLauncherMotor");
 

@@ -1,4 +1,4 @@
-package org.firstinspires.ftc.teamcode.opmodes.testing.archived;
+package org.firstinspires.ftc.teamcode.opmodes.testing;
 
 import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 
@@ -12,9 +12,7 @@ import org.firstinspires.ftc.teamcode.subsystems.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.TransferSubsystem;
 
 @Configurable
-@Disabled   // Nov 20: hidden for competition; remove this line to use it
 @TeleOp(name = "Intake Test", group = "Testing")
-//@Photon
 public class IntakeSubsystemTest extends ModularOpMode {
 
     private IntakeSubsystem intakeSubsystem;
@@ -40,7 +38,7 @@ public class IntakeSubsystemTest extends ModularOpMode {
 
     @Override
     protected void preload() {
-        intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
+        intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
 
         intakeSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.left_bumper);
 
@@ -48,7 +46,8 @@ public class IntakeSubsystemTest extends ModularOpMode {
 
         transferSubsystem = new TransferSubsystem(hardwareMap, "transferMotor", "pollenGateServo");
 
-        transferSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper || gamepad2.circle, () -> gamepad2.circle);
+        transferSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper || gamepad2.circle, () -> false);
+
 
         registerSubsystem(transferSubsystem);
 

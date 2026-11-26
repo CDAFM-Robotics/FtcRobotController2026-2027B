@@ -102,7 +102,7 @@ public class WholeBotTest extends ModularOpMode {
         registerSubsystem(transferSubsystem);
 
         intakeSubsystem = new IntakeSubsystem(
-                hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo");
+                hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
         intakeSubsystem.setBindings(bindingManager,
                 () -> intakeMotorSpeed * (gamepad1.right_trigger - gamepad1.left_trigger),
                 () -> gamepad1.left_bumper);
@@ -289,8 +289,8 @@ public class WholeBotTest extends ModularOpMode {
         telemetry.addData("Speed offset Pollen (gp2 B clears)", "%+.0f", launcherSubsystem.getPollenOffset());
         telemetry.addData("Flower pickup (gp1 Y)", !flowerMode ? "off"
                 : (intakeSubsystem.isFlowerWaitingForRetract() ? "ON - retracting extender" : "ON - bar down, intaking"));
-        telemetry.addData("Flower bar", !intakeSubsystem.isFlowerBarConfigured() ? "NOT CONFIGURED (flowerBarServo)"
-                : (intakeSubsystem.isFlowerBarDown() ? "DOWN" : (intakeSubsystem.isFlowerBarUp() ? "UP" : "raising")));
+        telemetry.addData("Flower bar", !intakeSubsystem.isWedgeConfigured() ? "NOT CONFIGURED (wedgeServo)"
+                : (intakeSubsystem.isWedgeDown() ? "DOWN" : (intakeSubsystem.isWedgeUp() ? "UP" : "raising")));
         telemetry.addData("Ball at sensor 1", transferSubsystem.hasBallAtSensor1() ? "YES" : "no");
 //        telemetry.addData("Macro state", macroState);
         telemetry.addData("Extender toggle", extenderToggle ? "EXTENDED" : "RETRACTED");
