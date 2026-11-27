@@ -40,7 +40,7 @@ public class IntakeSubsystemTest extends ModularOpMode {
     protected void preload() {
         intakeSubsystem = new IntakeSubsystem(hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
 
-        intakeSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.left_bumper);
+        intakeSubsystem.setBindings(bindingManager, () -> gamepad1.right_bumper, () -> gamepad1.left_bumper, () -> false, () -> false);
 
         registerSubsystem(intakeSubsystem);
 

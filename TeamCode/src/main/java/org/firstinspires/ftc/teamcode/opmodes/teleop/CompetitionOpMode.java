@@ -110,8 +110,8 @@ public class CompetitionOpMode extends ModularOpMode {
                 () -> gamepad1.right_trigger > 0.1 ? intakeMotorSpeed
                     : (gamepad1.left_trigger > 0.1 ? -intakeMotorSpeed
                     : (macroState != MacroState.IDLE ? intakeMotorSpeed : 0.0)),
-                () -> extenderToggle || macroState == MacroState.EXTENDING || macroState == MacroState.GRABBING);
-        intakeSubsystem.setFlowerBinding(bindingManager, () -> flowerMode);
+                () -> extenderToggle || macroState == MacroState.EXTENDING || macroState == MacroState.GRABBING,
+                () -> flowerMode, () -> false);
         registerSubsystem(intakeSubsystem);
 
         localizerSubsystem = new LocalizerSubsystem(hardwareMap, "pinpoint");

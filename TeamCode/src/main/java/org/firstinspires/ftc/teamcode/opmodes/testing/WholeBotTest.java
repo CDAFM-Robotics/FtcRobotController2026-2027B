@@ -105,8 +105,8 @@ public class WholeBotTest extends ModularOpMode {
                 hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
         intakeSubsystem.setBindings(bindingManager,
                 () -> intakeMotorSpeed * (gamepad1.right_trigger - gamepad1.left_trigger),
-                () -> gamepad1.left_bumper);
-        intakeSubsystem.setFlowerBinding(bindingManager, () -> flowerMode);
+                () -> gamepad1.left_bumper,
+                () -> flowerMode, () -> false);
         registerSubsystem(intakeSubsystem);
 
         localizerSubsystem = new LocalizerSubsystem(hardwareMap, "pinpoint");

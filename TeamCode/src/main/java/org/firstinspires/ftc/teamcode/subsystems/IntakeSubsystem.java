@@ -74,10 +74,8 @@ public class IntakeSubsystem extends Subsystem {
     public static final double POSITION_EXTENSION_SERVO_RETRACTED_RIGHT = 0.46;
     public static final double POSITION_EXTENSION_SERVO_EXTENDED_RIGHT = 0.38;
 
-    // Smooth ramp: fast step far from target, slow step near target
-    private static final double SERVO_STEP_FAST  = 0.010; // per loop iteration
-    private static final double SERVO_STEP_SLOW  = 0.003;
-    private static final double SLOW_ZONE        = 0.05;  // within this distance → slow
+    // Tolerance for the no-feedback "at retracted/extended" position estimate.
+    private static final double POSITION_TOLERANCE = 0.05;
 
     private double currentLeftPos  = POSITION_EXTENSION_SERVO_INIT_LEFT;
     private double currentRightPos = POSITION_EXTENSION_SERVO_INIT_RIGHT;
@@ -97,7 +95,6 @@ public class IntakeSubsystem extends Subsystem {
     private double retractCorrR = 0;
 
     private final ServoDevice wedgeServo;            // null if not configured
-    private boolean flowerBound = false;           // setFlowerBinding() called
     private boolean wedgeDown = false;         // bar commanded down
     private boolean flowerRaisedOnce = false;      // a raise has happened (so the stop-delay tail can run)
     private final ElapsedTime sinceFlowerRaise = new ElapsedTime();
@@ -113,23 +110,12 @@ public class IntakeSubsystem extends Subsystem {
         this.telemetry = telemetry;
     }
 
-    /**
-     * Flower pickup: while flowerPickup is true, the extender retracts, then the bar lowers and the intake runs at
-     * flowerIntakePower. When it goes false, the bar raises and the intake stops flowerIntakeStopDelaySec later. The
-     * intake binding (RT/LT in TeleOp) overrides the motor whenever it is non-zero. The extender cannot extend while
-     * Flower pickup is requested, the bar is down, or the bar is still rising.
-     */
-    public void setFlowerBinding(BindingManager bindingManager, BooleanSupplier flowerPickup) {
-        bindingManager.addBinding("flowerPickup", flowerPickup);
-        flowerBound = true;
-    }
-
     public boolean isWedgeConfigured() { return wedgeServo != null; }
     public boolean isWedgeDown()       { return wedgeDown; }
 
     /** Flower pickup requested but the bar is still up, waiting for the extender to retract. */
     public boolean isFlowerWaitingForRetract() {
-        return flowerBound && bindingManager.checkBinding("flowerPickup") && !wedgeDown && wedgeServo != null;
+        return bindingManager.checkBinding("flowerPickup") && !wedgeDown && wedgeServo != null;
     }
 
     /** Bar is up and has had wedgeMoveMs to get there since the last raise. */
@@ -137,15 +123,19 @@ public class IntakeSubsystem extends Subsystem {
         return !wedgeDown && (!flowerRaisedOnce || sinceFlowerRaise.milliseconds() >= wedgeMoveMs);
     }
 
-    public void setBindings(BindingManager bindingManager, BooleanSupplier intake, BooleanSupplier extender) {
+    public void setBindings(BindingManager bindingManager, BooleanSupplier intake, BooleanSupplier extender, BooleanSupplier flowerPickup, BooleanSupplier initExtender) {
         bindingManager.addBinding("intake", intake);
         bindingManager.addBinding("extendIntake", extender);
+        bindingManager.addBinding("initExtender", initExtender);
+        bindingManager.addBinding("flowerPickup", flowerPickup);
         this.bindingManager = bindingManager;
     }
 
-    public void setBindings(BindingManager bindingManager, DoubleSupplier intakeSpeed, BooleanSupplier extender) {
+    public void setBindings(BindingManager bindingManager, DoubleSupplier intakeSpeed, BooleanSupplier extender, BooleanSupplier flowerPickup, BooleanSupplier initExtender) {
         bindingManager.addAnalog("intakeSpeed", intakeSpeed);
         bindingManager.addBinding("extendIntake", extender);
+        bindingManager.addBinding("initExtender", initExtender);
+        bindingManager.addBinding("flowerPickup", flowerPickup);
         this.bindingManager = bindingManager;
         useAnalogIntake = true;
     }
@@ -201,8 +191,8 @@ public class IntakeSubsystem extends Subsystem {
         boolean retractedRaw, extendedRaw;
         if (leftFeedback == null && rightFeedback == null) {
             // No feedback wired: fall back to the commanded position estimate.
-            retractedRaw = Math.abs(currentLeftPos - POSITION_EXTENSION_SERVO_RETRACTED_LEFT) < SLOW_ZONE / 2;
-            extendedRaw  = Math.abs(currentLeftPos - POSITION_EXTENSION_SERVO_EXTENDED_LEFT)  < SLOW_ZONE / 2;
+            retractedRaw = Math.abs(currentLeftPos - POSITION_EXTENSION_SERVO_RETRACTED_LEFT) < POSITION_TOLERANCE / 2;
+            extendedRaw  = Math.abs(currentLeftPos - POSITION_EXTENSION_SERVO_EXTENDED_LEFT)  < POSITION_TOLERANCE / 2;
         } else {
             retractedRaw = (leftFeedback  == null || atOrBeyond(vL, extLeftRetractedV,  extLeftExtendedV,   extFeedbackMarginV))
                         && (rightFeedback == null || atOrBeyond(vR, extRightRetractedV, extRightExtendedV,  extFeedbackMarginV));
@@ -244,7 +234,7 @@ public class IntakeSubsystem extends Subsystem {
         updateExtenderFeedback();
 
         // Flower bar: lower only once the extender is retracted; raise as soon as pickup is no longer requested.
-        boolean flowerWanted = flowerBound && bindingManager.checkBinding("flowerPickup");
+        boolean flowerWanted = bindingManager.checkBinding("flowerPickup");
         if (flowerWanted && !wedgeDown && wedgeServo != null && isRetracted()) {
             wedgeDown = true;
         } else if (!flowerWanted && wedgeDown) {
@@ -267,36 +257,44 @@ public class IntakeSubsystem extends Subsystem {
         }
         intakeMotor.setPower(requested != 0 ? requested : (flowerIntakeOn ? flowerIntakePower : 0));
 
-        // Smooth servo ramp toward target. Interlock: the extender stays retracted while Flower pickup is requested
+        // Extender target. Interlock: the extender stays retracted while Flower pickup is requested
         // (this is what retracts it before the bar lowers), while the bar is down, and while the bar is still rising.
+        // initExtender overrides everything and parks both servos at their INIT position.
+        boolean initRequested = bindingManager.checkBinding("initExtender");
         boolean extend = bindingManager.checkBinding("extendIntake")
-                && !flowerWanted && isWedgeUp();
-        if (extend) {
+                && !flowerWanted && isWedgeUp() && !initRequested;
+        if (extend || initRequested) {
             retractCorrL = 0;
             retractCorrR = 0;
         }
         // "Further in" direction per side is from RETRACTED toward INIT.
         double inL = Math.signum(POSITION_EXTENSION_SERVO_INIT_LEFT  - POSITION_EXTENSION_SERVO_RETRACTED_LEFT);
         double inR = Math.signum(POSITION_EXTENSION_SERVO_INIT_RIGHT - POSITION_EXTENSION_SERVO_RETRACTED_RIGHT);
-        double leftGoal  = extend
-                ? POSITION_EXTENSION_SERVO_EXTENDED_LEFT
-                : POSITION_EXTENSION_SERVO_RETRACTED_LEFT + inL * retractCorrL;
-        double rightGoal = extend
-                ? POSITION_EXTENSION_SERVO_EXTENDED_RIGHT
-                : POSITION_EXTENSION_SERVO_RETRACTED_RIGHT + inR * retractCorrR;
+        double leftGoal, rightGoal;
+        if (initRequested) {
+            leftGoal  = POSITION_EXTENSION_SERVO_INIT_LEFT;
+            rightGoal = POSITION_EXTENSION_SERVO_INIT_RIGHT;
+        } else {
+            leftGoal  = extend
+                    ? POSITION_EXTENSION_SERVO_EXTENDED_LEFT
+                    : POSITION_EXTENSION_SERVO_RETRACTED_LEFT + inL * retractCorrL;
+            rightGoal = extend
+                    ? POSITION_EXTENSION_SERVO_EXTENDED_RIGHT
+                    : POSITION_EXTENSION_SERVO_RETRACTED_RIGHT + inR * retractCorrR;
+        }
 
-        currentLeftPos  = stepToward(currentLeftPos,  leftGoal);
-        currentRightPos = stepToward(currentRightPos, rightGoal);
+        currentLeftPos  = leftGoal;
+        currentRightPos = rightGoal;
 
-        // Feedback-corrected retract: once a side has finished ramping to its retract goal, pull it further in (for the
-        // next loop) while its feedback is outside the retracted range, up to INIT.
-        if (!extend && retractCorrectionEnabled) {
+        // Feedback-corrected retract: while a side should be retracted, pull it further in (for the next loop) while its
+        // feedback is outside the retracted range, up to INIT.
+        if (!extend && !initRequested && retractCorrectionEnabled) {
             double maxL = Math.abs(POSITION_EXTENSION_SERVO_RETRACTED_LEFT  - POSITION_EXTENSION_SERVO_INIT_LEFT);
             double maxR = Math.abs(POSITION_EXTENSION_SERVO_RETRACTED_RIGHT - POSITION_EXTENSION_SERVO_INIT_RIGHT);
-            if (leftFeedback != null && currentLeftPos == leftGoal && !leftInRetractedRange) {
+            if (leftFeedback != null && !leftInRetractedRange) {
                 retractCorrL = Math.min(maxL, retractCorrL + retractCorrectionStep);
             }
-            if (rightFeedback != null && currentRightPos == rightGoal && !rightInRetractedRange) {
+            if (rightFeedback != null && !rightInRetractedRange) {
                 retractCorrR = Math.min(maxR, retractCorrR + retractCorrectionStep);
             }
         }
@@ -312,12 +310,4 @@ public class IntakeSubsystem extends Subsystem {
     }
 
     @Override public void stop() {}
-
-    // Moves value toward goal with fast step when far, slow step near end
-    private static double stepToward(double current, double goal) {
-        double delta = goal - current;
-        if (Math.abs(delta) < 0.001) return goal;
-        double step = Math.abs(delta) < SLOW_ZONE ? SERVO_STEP_SLOW : SERVO_STEP_FAST;
-        return current + Math.signum(delta) * Math.min(Math.abs(delta), step);
-    }
 }

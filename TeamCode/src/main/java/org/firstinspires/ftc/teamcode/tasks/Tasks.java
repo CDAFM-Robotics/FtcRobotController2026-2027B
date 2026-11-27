@@ -50,7 +50,7 @@ public class Tasks {
         this.transfer = transfer;
         this.launcher = launcher;
 
-        intake.setBindings(bindingManager, () -> intakeSpeed, () -> intakeExtend);
+        intake.setBindings(bindingManager, () -> intakeSpeed, () -> intakeExtend, () -> false, () -> false);
         transfer.setBindings(bindingManager, () -> transferServoActive, () -> transferActive);
         launcher.setBindings(bindingManager, () -> launcherActive);
         // The launcher recomputes its target as base + manual offset every loop, so the automatic distance-based speed
