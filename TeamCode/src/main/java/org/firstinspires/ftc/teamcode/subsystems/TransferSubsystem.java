@@ -31,8 +31,8 @@ public class TransferSubsystem extends Subsystem {
 
     private static final double TRANSFER_POWER_STEP = 0.1;
 
-    public static final double POLLEN_GATE_POSITION_OPEN = 0.25;
-    public static final double POLLEN_GATE_POSITION_CLOSED = 0.0;
+    public static final double POLLEN_GATE_POSITION_OPEN = 0.75;
+    public static final double POLLEN_GATE_POSITION_CLOSED = 0.5;
 
     // Feed power. All three are Panels fields and are read every loop, so an edit in Panels takes effect at once.
     // The 5-argument setBindings can also step transferMotorPower by 0.1 from buttons; no OpMode uses it now
