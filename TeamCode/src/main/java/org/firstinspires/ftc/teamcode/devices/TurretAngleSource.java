@@ -5,8 +5,9 @@ package org.firstinspires.ftc.teamcode.devices;
  * control loop: {@link AxonTurretAngleSource} (Axon feedback wire, bot 1.5 today) now, a REV Through Bore encoder
  * on the turret later.
  *
- * Turret angle convention (degrees): 0 = Pollen pointing straight out the robot's RIGHT side (bot 1.0's fixed shot
- * direction), positive = counterclockwise seen from above (toward the robot's front), same sense as field heading.
+ * Turret angle convention (degrees): 0 = mechanical zero, the middle of the cord's travel
+ * (AutoAimSubsystem.turretZeroDirectionDeg records which way the shot leaves there), positive = counterclockwise seen
+ * from above, same sense as field heading.
  */
 public interface TurretAngleSource {
 

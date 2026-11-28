@@ -30,7 +30,7 @@ public class CompetitionOpMode extends ModularOpMode {
     // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
     // holds home. Angle is fused: the Through Bore encoder (frontRightDriveMotor port) gives the coarse half-turn and
     // the Axon feedback (turretServoSignal) the fine angle. Home is carried over from Autonomous while the hub stays
-    // powered, or set by hand: point Pollen straight out the right side and press gp2 X. gp2 dpad left/right trim the
+    // powered, or set by hand: point Pollen at mechanical zero (cord untwisted) and press gp2 X. gp2 dpad left/right trim the
     // aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
     public static double turretTrimStepDeg = 1.0;
     // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).
@@ -46,11 +46,6 @@ public class CompetitionOpMode extends ModularOpMode {
     public static double readyBandTicks = 40;
     // Intake motor speed magnitude, live-tunable from Panels (from andre's 2c05819)
     public static double intakeMotorSpeed = 1.0;   // was 0.75; felt slow on Nov 14
-
-    private enum MacroState { IDLE, EXTENDING, GRABBING, RETRACTING }
-    private MacroState macroState = MacroState.IDLE;
-    private final ElapsedTime macroTimer = new ElapsedTime();
-    private static final double GRAB_TIMEOUT_SEC = 2.0;
 
     private boolean lastGateOpen        = false;
     private boolean extenderToggle      = false;
@@ -108,10 +103,8 @@ public class CompetitionOpMode extends ModularOpMode {
         intakeSubsystem = new IntakeSubsystem(
                 hardwareMap, telemetry, "intakeMotor", "leftExtenderServo", "rightExtenderServo", "wedgeServo");
         intakeSubsystem.setBindings(bindingManager,
-                () -> gamepad1.right_trigger > 0.1 ? intakeMotorSpeed
-                    : (gamepad1.left_trigger > 0.1 ? -intakeMotorSpeed
-                    : (macroState != MacroState.IDLE ? intakeMotorSpeed : 0.0)),
-                () -> extenderToggle || macroState == MacroState.EXTENDING || macroState == MacroState.GRABBING,
+                () -> intakeMotorSpeed * (gamepad1.right_trigger - gamepad1.left_trigger),
+                () -> gamepad1.left_bumper,
                 () -> flowerMode, () -> false);
         registerSubsystem(intakeSubsystem);
 
@@ -142,7 +135,7 @@ public class CompetitionOpMode extends ModularOpMode {
                 () -> gamepad1.left_stick_x,
                 () -> gamepad1.right_stick_x,
                 () -> 1,
-                localizerSubsystem::getDriveHeading);   // alliance-adjusted; 0 (robot-centric) until alliance + heading known
+                localizerSubsystem::getDriveHeading);   // always field-centric, alliance-adjusted
         registerSubsystem(mecanumDriveTrainSubsystem);
     }
 
@@ -200,7 +193,7 @@ public class CompetitionOpMode extends ModularOpMode {
 
     /** Turret commands for this loop; runs before the subsystems update. */
     private void updateTurret() {
-        if (gamepad2.xWasPressed()) turretSubsystem.setHomeHere();   // point Pollen straight out the right side first
+        if (gamepad2.xWasPressed()) turretSubsystem.setHomeHere();   // point Pollen at mechanical zero (cord untwisted) first
         if (gamepad2.dpadRightWasPressed()) turretTrimDeg += turretTrimStepDeg;
         if (gamepad2.dpadLeftWasPressed())  turretTrimDeg -= turretTrimStepDeg;
         if (turretAiming()) {
@@ -229,29 +222,8 @@ public class CompetitionOpMode extends ModularOpMode {
         boolean yNow = gamepad1.y;
         if (yNow && !prevY) {
             flowerMode = !flowerMode;
-            if (flowerMode) {
-                macroState = MacroState.IDLE;
-                extenderToggle = false;
-            }
         }
         prevY = yNow;
-
-        // gp1 LB: toggle extender (ignored during Flower pickup)
-        boolean lbNow = gamepad1.left_bumper;
-        if (lbNow && !prevLB && !flowerMode) extenderToggle = !extenderToggle;
-        prevLB = lbNow;
-
-        // gp1 A: start/cancel intake macro (ignored during Flower pickup)
-        boolean aNow = gamepad1.a;
-        if (aNow && !prevA && !flowerMode) {
-            if (macroState == MacroState.IDLE) {
-                macroState = MacroState.EXTENDING;
-                macroTimer.reset();
-            } else {
-                macroState = MacroState.IDLE;
-            }
-        }
-        prevA = aNow;
 
         // gp1 rumble once per ball at transfer colorSensor1.
         if (transferSubsystem.hasBallAtSensor1()) {
@@ -277,27 +249,27 @@ public class CompetitionOpMode extends ModularOpMode {
         boolean lbPressed = gamepad2.leftBumperWasPressed();
         if (rbPressed || lbPressed) preSpin = !anyWheelSpinning();
 
-        // Macro state machine
-        switch (macroState) {
-            case EXTENDING:
-                if (intakeSubsystem.isExtended()) {
-                    macroState = MacroState.GRABBING;
-                    macroTimer.reset();
-                }
-                break;
-            case GRABBING:
-                if (macroTimer.seconds() >= GRAB_TIMEOUT_SEC) {
-                    macroState = MacroState.RETRACTING;
-                }
-                break;
-            case RETRACTING:
-                if (intakeSubsystem.isRetracted()) {
-                    macroState = MacroState.IDLE;
-                }
-                break;
-            default:
-                break;
-        }
+//        // Macro state machine
+//        switch (macroState) {
+//            case EXTENDING:
+//                if (intakeSubsystem.isExtended()) {
+//                    macroState = MacroState.GRABBING;
+//                    macroTimer.reset();
+//                }
+//                break;
+//            case GRABBING:
+//                if (macroTimer.seconds() >= GRAB_TIMEOUT_SEC) {
+//                    macroState = MacroState.RETRACTING;
+//                }
+//                break;
+//            case RETRACTING:
+//                if (intakeSubsystem.isRetracted()) {
+//                    macroState = MacroState.IDLE;
+//                }
+//                break;
+//            default:
+//                break;
+//        }
 
         // gp2 B: clear the +/-20 speed offsets back to 0 (target = table speed)
         if (gamepad2.bWasPressed()) { launcherSubsystem.resetOffsets(); turretTrimDeg = 0; }
@@ -314,7 +286,7 @@ public class CompetitionOpMode extends ModularOpMode {
         telemetry.addData("Flower bar", !intakeSubsystem.isWedgeConfigured() ? "NOT CONFIGURED (wedgeServo)"
                 : (intakeSubsystem.isWedgeDown() ? "DOWN" : (intakeSubsystem.isWedgeUp() ? "UP" : "raising")));
         telemetry.addData("Ball at sensor 1", transferSubsystem.hasBallAtSensor1() ? "YES" : "no");
-        telemetry.addData("Macro state", macroState);
+//        telemetry.addData("Macro state", macroState);
         telemetry.addData("Extender toggle", extenderToggle ? "EXTENDED" : "RETRACTED");
         telemetry.addData("Extender L feedback (V)", "%.3f", intakeSubsystem.getLeftFeedbackVoltage());
         telemetry.addData("Extender R feedback (V)", "%.3f", intakeSubsystem.getRightFeedbackVoltage());

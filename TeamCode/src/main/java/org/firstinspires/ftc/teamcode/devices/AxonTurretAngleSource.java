@@ -38,8 +38,10 @@ public class AxonTurretAngleSource implements TurretAngleSource {
     // Servo turns per turret turn (80T turret gear / 40T servo gear).
     public static double gearRatio = 2.0;
     // Flip if the turret angle goes DOWN while the turret turns counterclockwise (seen from above). Set true from the
-    // fusion data (Nov 27): the Axon fine angle ran opposite to the Through Bore coarse (fine ≈ -coarse).
-    public static boolean reversed = true;
+    // fusion data (Nov 27): the Axon fine angle runs opposite to the Through Bore coarse, so this is always the
+    // opposite of ThroughBoreTurretAngleSource.reversed. Now false: the whole turret sense was flipped later on Nov 27
+    // (see TurretSubsystem.servoReversed). servoDegAtZero is unaffected (same reading at mechanical zero).
+    public static boolean reversed = false;
     // Absolute start (see class comment). servoDegAtZero = the servo reading (0..360) at turret mechanical zero; it is
     // the fixed offset between the Axon's electrical zero and mechanical zero, so the absolute reading gives the turret
     // angle with no homing. Measured Nov 27 (servo zero sits ~43 deg from mechanical zero). NaN turns absolute start off.

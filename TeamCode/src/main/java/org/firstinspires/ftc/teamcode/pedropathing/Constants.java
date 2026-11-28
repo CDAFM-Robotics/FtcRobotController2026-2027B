@@ -23,13 +23,14 @@ import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
  * following algorithm — instead of the 2.x {@code FollowerBuilder}/{@code FollowerConstants}. Each
  * piece is configured below and assembled in {@link #createFollower(HardwareMap)}.
  *
- * <p>Nothing here is tuned yet. Run the AutoTune procedures registered in {@link Tuning} <b>in this
- * order</b>; each produces the values the next one needs:
+ * <p>The localizer and Foresight blocks hold tuned values (Pinpoint Tuner and Foresight Tuner, Nov 2026).
+ * To re-tune, run the AutoTune procedures registered in {@link Tuning} <b>in this order</b>; each
+ * produces the values the next one needs:
  *
  * <ol>
  *   <li><b>Mecanum Tuner</b> → the four {@code *Direction} values in {@link #drivetrainConfig}.
  *   <li><b>Pinpoint Tuner</b> → the pod directions and offsets in {@link #localizerConfig}.
- *   <li><b>Foresight Tuner</b> → the whole of {@link #foresightConfig}, which is empty until then.
+ *   <li><b>Foresight Tuner</b> → the whole of {@link #foresightConfig}.
  *   <li><b>Tests</b> → verifies the result.
  * </ol>
  *
@@ -39,9 +40,8 @@ public class Constants {
     /**
      * Drivetrain: four-motor mecanum.
      *
-     * <p>Motor names carried over from the previous drive-encoder config. The directions are the
-     * conventional result for mirror-mounted motors (left side reversed) and are a
-     * <b>placeholder</b> — the Mecanum Tuner spins each motor and tells you the real answer.
+     * <p>Motor names carried over from the previous drive-encoder config. Left side reversed
+     * (mirror-mounted motors). Re-run the Mecanum Tuner if a motor is remounted or rewired.
      */
     public static MecanumConfig drivetrainConfig = new MecanumConfig(c -> {
         c.frontLeftName.set("frontLeftDriveMotor");
@@ -59,61 +59,64 @@ public class Constants {
      * Localizer: goBILDA Pinpoint with 4-bar odometry pods.
      *
      * <p>Replaces the 2.x drive-encoder localizer, which Pedro 3 removed. The pod offsets and
-     * directions are <b>placeholders</b>: the Pinpoint Tuner derives all four by having you push the
-     * robot forward, push it left, and spin it 180°, then emits a finished {@code PinpointConfig}
-     * block to paste over this one. Until then, zero offsets mean heading changes will corrupt the
-     * position estimate.
+     * directions are the Pinpoint Tuner's output for bot 1.5 (tuned Nov 2026). Re-run the tuner and
+     * paste its {@code PinpointConfig} block over this one if a pod is moved.
      *
-     * <p>Set {@code name} to whatever the Pinpoint is configured as in the Robot Controller.
+     * <p>{@code LocalizerSubsystem} (TeleOp) reads this same config, so TeleOp and autonomous always
+     * configure the Pinpoint identically. Do not copy these numbers anywhere else.
+     *
+     * <p>{@code name} must match the Pinpoint's name in the Robot Controller configuration.
      */
     public static PinpointConfig localizerConfig = new PinpointConfig(c -> {
         c.name.set("pinpoint");
         c.podType.set(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-        c.xPodOffset.set(5.796922698734313);
-        c.yPodOffset.set(-3.649800518366296);
+
+        // Nov 27 (late): Localization Test showed both pods counting backwards (forward -> -x, left -> -y), so both
+        // directions are REVERSED. The Pinpoint Tuner measured the offsets with the pods still counting backwards,
+        // which negates its result, so the offsets below are the tuner's values (-7.449, 2.694) with the signs
+        // flipped. Check: spin in place - x and y should stay put. If they swing, re-run the Pinpoint Tuner.
+        c.xPodOffset.set(7.44902603269562);
+        c.yPodOffset.set(-2.6935222956139273);
+
         c.xPodDirection.set(GoBildaPinpointDriver.EncoderDirection.REVERSED);
         c.yPodDirection.set(GoBildaPinpointDriver.EncoderDirection.REVERSED);
+
         c.globalDistanceUnit.set(DistanceUnit.INCH);
         c.offsetUnits.set(DistanceUnit.INCH);
     });
 
 
     /**
-     * Following algorithm: Foresight. <b>Not tuned yet — this block is intentionally empty.</b>
+     * Following algorithm: Foresight. Tuned with the Foresight Tuner (Nov 2026).
      *
-     * <p>Twelve of {@link ForesightConfig}'s variables are declared with no default (the two
-     * translational controllers, heading feedback, brake, coast, the three brake-coefficient
-     * matrices, both max achievable velocities, and both natural decelerations). Reading an unset
-     * one throws {@code IllegalStateException}. Those twelve are exactly what the Foresight Tuner
-     * measures — they are properties of this robot's mass, wheels and battery, so there is no
-     * sensible default and nothing should be guessed.
-     *
-     * <p>Run the Foresight Tuner and paste its generated block in place of this lambda body.
-     * {@link #createAlgorithm()} fails with a readable message until you do.
+     * <p>These values are properties of this robot's mass, wheels and battery, so they have no
+     * sensible defaults: twelve of {@link ForesightConfig}'s variables throw
+     * {@code IllegalStateException} when read unset. After a significant mechanical change, re-run
+     * the Foresight Tuner and paste its generated block in place of this lambda body.
      */
     public static ForesightConfig foresightConfig = new ForesightConfig(
         c -> {
-            Controller primaryTranslationalForward = Controller.proportional(0.3710824438105774);
-            Controller secondaryTranslationalForward = Controller.proportional(0.13710504748249328);
-            Controller primaryTranslationalLateral = Controller.proportional(0.7367369694984635);
-            Controller secondaryTranslationalLateral = Controller.proportional(0.27220462425529546);
+            Controller primaryTranslationalForward = Controller.proportional(0.31552990869062886);
+            Controller secondaryTranslationalForward = Controller.proportional(0.1165798701467491);
+            Controller primaryTranslationalLateral = Controller.proportional(0.3968134313803307);
+            Controller secondaryTranslationalLateral = Controller.proportional(0.14661195984486658);
 
             c.forwardTranslational.set(Controller.piecewise(secondaryTranslationalForward).put(2.5, primaryTranslationalForward));
             c.strafeTranslational.set(Controller.piecewise(secondaryTranslationalLateral).put(2.5, primaryTranslationalLateral));
 
-            c.coast.set(Controller.proportionalFeedforward(0.01293544543489575));
-            c.brake.set(Controller.proportionalFeedforward(0.010995128619661386));
+            c.coast.set(Controller.proportionalFeedforward(0.012910126255410138));
+            c.brake.set(Controller.proportionalFeedforward(0.010973607317098618));
 
-            c.headingFeedback.set(Controller.proportional(6.797493189222708));
-            c.headingBrakeCoefficients.set(Vector2D.cartesian(0.04837072145477509, 0.006862230224386472));
+            c.headingFeedback.set(Controller.proportional(5.006299838728706));
+            c.headingBrakeCoefficients.set(Vector2D.cartesian(0.04229571819651968, 0.010950766167994097));
 
-            c.linearBrakeCoefficients.set(Matrix.diag(0.09781235771495, 0.06757640510201267));
-            c.quadraticBrakeCoefficients.set(Matrix.diag(0.0013705080948031507, 0.001416547800078727));
+            c.linearBrakeCoefficients.set(Matrix.diag(0.10510081260598154, 0.046043915726641196));
+            c.quadraticBrakeCoefficients.set(Matrix.diag(0.0014232079573974425, 0.002433069976482845));
 
-            c.maxAchievableForwardVelocity.set(74.05187288426968);
-            c.maxAchievableStrafeVelocity.set(55.64529252350862);
-            c.naturalForwardDeceleration.set(36.116698954253856);
-            c.naturalStrafeDeceleration.set(69.0924421172708);
+            c.maxAchievableForwardVelocity.set(73.84358979581263);
+            c.maxAchievableStrafeVelocity.set(54.72310939860315);
+            c.naturalForwardDeceleration.set(30.952686255283027);
+            c.naturalStrafeDeceleration.set(73.90994820445482);
         }
     );
 
@@ -125,13 +128,7 @@ public class Constants {
         return new PinpointLocalizer(hardwareMap, localizerConfig);
     }
 
-    /**
-     * Builds the Foresight algorithm, checking up front that it has been tuned.
-     *
-     * <p>Without this check the first unset variable surfaces as a bare {@code IllegalStateException}
-     * partway through following a path — no field name, no hint. The tuner writes all twelve required
-     * values in one block, so probing one of them is enough to tell "never tuned" from "tuned".
-     */
+    /** Builds the Foresight algorithm from {@link #foresightConfig}. */
     public static Foresight createAlgorithm() {
         return new Foresight(foresightConfig);
     }

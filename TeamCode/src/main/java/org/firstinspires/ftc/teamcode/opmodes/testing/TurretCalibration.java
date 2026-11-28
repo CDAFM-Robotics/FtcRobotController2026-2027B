@@ -18,9 +18,9 @@ import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
  *     AxonTurretAngleSource.minVoltage / maxVoltage.
  *  3. Angle direction: press X to zero, then stick right - the turret angle must go UP. If not, flip
  *     AxonTurretAngleSource.reversed. Turn the turret 90 deg by hand-measure; the angle should read ~90 (else check gearRatio).
- *  4. Home angle: point Pollen exactly straight out the right side, set homeAngleDeg = 0, press X. The angle now
+ *  4. Home angle: point Pollen at mechanical zero (cord untwisted), set homeAngleDeg = 0, press X. The angle now
  *     reads 0 at that spot.
- *  4b. Absolute start: with Pollen straight out the right side and X pressed, copy "servoDegAtZero" from telemetry
+ *  4b. Absolute start: with Pollen at mechanical zero (cord untwisted) and X pressed, copy "servoDegAtZero" from telemetry
  *     into AxonTurretAngleSource.servoDegAtZero in the code. From then on the angle is known at INIT with no homing,
  *     as long as the program starts with the turret in 0..+180 (TurretSubsystem.startWindowCenterDeg +/- 90). Check:
  *     restart with the turret at a few spots in that range; "Homed" should say "absolute start" and the angle should match.

@@ -15,9 +15,9 @@ import org.firstinspires.ftc.teamcode.devices.TurretAngleSource;
  * Bot 1.5 Pollen turret: an Axon servo in CONTINUOUS mode turns the turret through a 40T -> 80T gear. The servo only
  * takes a power, so position comes from a {@link TurretAngleSource} and this class closes the loop.
  *
- * Angle convention: 0 = Pollen pointing straight out the robot's right side, + = counterclockwise seen from above.
+ * Angle convention: 0 = mechanical zero, the middle of the cord's travel, + = counterclockwise seen from above.
  * Angles are continuous (no wrap). The wires allow one full turn: minAngleDeg..maxAngleDeg = -180..180 around home,
- * so the two ends point the same way (the "seam", straight out the robot's LEFT side with home at the right side).
+ * so the two ends point the same way (the "seam", directly opposite mechanical zero).
  *
  * Aiming ({@link #setAimDeg}): of the angles that point the requested way (deg + k*360), take the one nearest the
  * current target, allowing up to aimHysteresisDeg past either limit, then clamp to the travel. Following a moving
@@ -55,7 +55,10 @@ public class TurretSubsystem extends Subsystem {
     public static double startWindowCenterDeg = 0;   // the turret must power up within +/- 90 of this (mechanical zero) for the Axon absolute start to pick the right half
 
     // Flip if positive power turns the turret clockwise (seen from above).
-    public static boolean servoReversed = false;
+    // Nov 27: set true after auto-aim turned the wrong way (left when it should go right). The whole turret sense was
+    // mirrored, so the two sensor signs were flipped with it (ThroughBoreTurretAngleSource.reversed and
+    // AxonTurretAngleSource.reversed). All three must flip together: flipping the servo alone makes the loop run away.
+    public static boolean servoReversed = true;
 
     public enum State { NOT_HOMED, READY, MANUAL }
 

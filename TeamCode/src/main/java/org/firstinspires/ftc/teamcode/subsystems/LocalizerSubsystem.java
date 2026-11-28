@@ -28,8 +28,10 @@ import java.util.function.BooleanSupplier;
  *  - Corner reset (hold): robot in its alliance's Garden corner, facing the left/right wall. Red (9, 9, 180 deg),
  *    Blue = 180 deg rotation (132.5, 132.5, 0 deg).
  *  - Heading reset (hold): robot facing straight away from its drivers. Red 0 deg, Blue 180 deg; x and y unchanged.
- *  - {@link #getDriveHeading()}: heading for field-centric driving. Red drivers stand at x = 0 facing +x, so Red uses
- *    the heading as is and Blue subtracts 180 deg. Returns 0 (robot-centric) until the alliance and heading are known.
+ *  - {@link #getDriveHeading()}: heading for field-centric driving, which is always on (Nov 27: the robot-centric
+ *    fallback was removed). Red drivers stand at x = 0 facing +x, so Red (or no alliance yet) uses the heading as is
+ *    and Blue subtracts 180 deg. Until a corner / heading reset or an autonomous handoff, the heading is whatever the
+ *    Pinpoint holds, so "away from the drivers" is the way the robot faced when the Pinpoint last zeroed.
  */
 @Configurable
 public class LocalizerSubsystem extends Subsystem implements PoseSource {
@@ -102,15 +104,15 @@ public class LocalizerSubsystem extends Subsystem implements PoseSource {
     /** Null until set by PoseStorage or the alliance buttons. */
     public Alliance getAlliance() { return alliance; }
 
-    public boolean isFieldCentric() { return alliance != null && headingKnown; }
+    /** True once the field-centric heading is trustworthy: alliance picked and heading set by a reset or handoff. */
+    public boolean isDriveHeadingCalibrated() { return alliance != null && headingKnown; }
 
     /** Position, heading and alliance all known: what auto-aim needs. */
     public boolean isPoseKnown() { return alliance != null && positionKnown && headingKnown; }
 
-    /** Heading for field-centric driving (radians); 0 = robot-centric until the alliance and heading are known. */
+    /** Heading for field-centric driving (radians). Always field-centric; Blue is turned 180 deg, no alliance = Red. */
     public double getDriveHeading() {
-        if (!isFieldCentric()) return 0;
-        return alliance == Alliance.RED ? pinpoint.getHeading() : pinpoint.getHeading() - Math.PI;
+        return alliance == Alliance.BLUE ? pinpoint.getHeading() - Math.PI : pinpoint.getHeading();
     }
 
     @Override
@@ -215,7 +217,8 @@ public class LocalizerSubsystem extends Subsystem implements PoseSource {
         telemetry.addData("Pose x / y / heading", "%.1f in / %.1f in / %.1f deg",
                 pinpoint.getX(), pinpoint.getY(), Math.toDegrees(pinpoint.getHeading()));
         telemetry.addData("Pose from", positionKnown || headingKnown ? poseSource : "NONE - do a corner reset");
-        telemetry.addData("Drive", isFieldCentric() ? "FIELD-CENTRIC" : "robot-centric (alliance or heading not set)");
+        telemetry.addData("Drive", isDriveHeadingCalibrated() ? "FIELD-CENTRIC"
+                : "FIELD-CENTRIC, heading NOT reset - pick alliance, then hold dpad down facing away from drivers");
         if (!lastMessage.isEmpty()) telemetry.addLine(lastMessage);
         telemetry.addLine("gp1 hold Back/Share: corner reset | hold dpad down: heading reset");
     }

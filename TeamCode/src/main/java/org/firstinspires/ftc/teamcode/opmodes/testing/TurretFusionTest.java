@@ -18,7 +18,7 @@ import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
  * (homes the coarse encoder). The fine angle also needs {@link AxonTurretAngleSource#servoDegAtZero} set in code -
  * until then it runs coarse-only, which is a safe way to bring it up.
  *
- * What to check: point Pollen straight out the right side, press X, then jog around. "Fused" should track smoothly and
+ * What to check: point Pollen at mechanical zero (cord untwisted), press X, then jog around. "Fused" should track smoothly and
  * agree with "Coarse"; "Fine" should match modulo one sector (180 deg at 2:1). If "Fused" jumps by ~180 the coarse is
  * picking the wrong half - check gearRatio and the home. The angle counting the wrong way means reversed is flipped.
  */
@@ -43,7 +43,7 @@ public class TurretFusionTest extends ModularOpMode {
     public void loop() {
         double stick = gamepad1.left_stick_x;
 
-        if (gamepad1.xWasPressed()) turret.setHomeHere();   // point Pollen straight out the right side first
+        if (gamepad1.xWasPressed()) turret.setHomeHere();   // point Pollen at mechanical zero (cord untwisted) first
         if (Math.abs(stick) > 0.05) {
             turret.setManualPower(stick * manualScale);
         } else {

@@ -18,7 +18,6 @@ import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
 import org.firstinspires.ftc.teamcode.util.LoopProfiler;
 
 @Configurable
-@Disabled   // Nov 20: hidden for competition; remove this line to use it
 @TeleOp(name = "Whole Bot Test", group = "Testing")
 public class WholeBotTest extends ModularOpMode {
 
@@ -32,7 +31,7 @@ public class WholeBotTest extends ModularOpMode {
     // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
     // holds home. Angle is fused: the Through Bore encoder (frontRightDriveMotor port) gives the coarse half-turn and
     // the Axon feedback (turretServoSignal) the fine angle. Home is carried over from Autonomous while the hub stays
-    // powered, or set by hand: point Pollen straight out the right side and press gp2 X. gp2 dpad left/right trim the
+    // powered, or set by hand: point Pollen at mechanical zero (cord untwisted) and press gp2 X. gp2 dpad left/right trim the
     // aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
     public static double turretTrimStepDeg = 1.0;
     // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).
@@ -137,7 +136,7 @@ public class WholeBotTest extends ModularOpMode {
                 () -> gamepad1.left_stick_x,
                 () -> gamepad1.right_stick_x,
                 () -> 1,
-                localizerSubsystem::getDriveHeading);   // alliance-adjusted; 0 (robot-centric) until alliance + heading known
+                localizerSubsystem::getDriveHeading);   // always field-centric, alliance-adjusted
         registerSubsystem(mecanumDriveTrainSubsystem);
     }
 
@@ -193,9 +192,33 @@ public class WholeBotTest extends ModularOpMode {
         return isFiring() && wheelReady() && turretReady();
     }
 
+    // Aim debug (Nov 27): logcat is flooded on this robot, so one line every aimDebugPeriodSec is appended to
+    // /sdcard/FIRST/aim_debug.txt (cleared at INIT) for reading over adb. Whole Bot Test only.
+    public static double aimDebugPeriodSec = 0.25;
+    private final ElapsedTime aimDebugTimer = new ElapsedTime();
+    private boolean aimDebugStarted = false;
+
+    private void writeAimDebug(String phase) {
+        if (aimDebugStarted && aimDebugTimer.seconds() < aimDebugPeriodSec) return;
+        aimDebugTimer.reset();
+        try (java.io.FileWriter fw = new java.io.FileWriter("/sdcard/FIRST/aim_debug.txt", aimDebugStarted)) {
+            aimDebugStarted = true;
+            boolean known = autoAimSubsystem.isAvailable();
+            fw.write(String.format(java.util.Locale.US,
+                    "%s t=%.1f alliance=%s poseKnown=%b x=%.1f y=%.1f hdg=%.1f | cell=%s tgt=(%.1f,%.1f) dist=%.1f aim=%.1f trim=%.1f | turret homed=%b state=%s ang=%.1f target=%.1f pow=%.3f onTarget=%b%n",
+                    phase, getRuntime(), localizerSubsystem.getAlliance(), known,
+                    localizerSubsystem.getX(), localizerSubsystem.getY(), Math.toDegrees(localizerSubsystem.getHeading()),
+                    known ? autoAimSubsystem.getTargetCell() : null,
+                    known ? autoAimSubsystem.getTargetX() : Double.NaN, known ? autoAimSubsystem.getTargetY() : Double.NaN,
+                    known ? autoAimSubsystem.getPollenDistance() : Double.NaN, autoAimSubsystem.getTurretTargetDeg(), turretTrimDeg,
+                    turretSubsystem.isHomed(), turretSubsystem.getState(), turretSubsystem.getAngleDeg(),
+                    turretSubsystem.getTargetDeg(), turretSubsystem.getPower(), turretSubsystem.isOnTarget()));
+        } catch (java.io.IOException ignored) { }
+    }
+
     /** Turret commands for this loop; runs before the subsystems update. */
     private void updateTurret() {
-        if (gamepad2.xWasPressed()) turretSubsystem.setHomeHere();   // point Pollen straight out the right side first
+        if (gamepad2.xWasPressed()) turretSubsystem.setHomeHere();   // point Pollen at mechanical zero (cord untwisted) first
         if (gamepad2.dpadRightWasPressed()) turretTrimDeg += turretTrimStepDeg;
         if (gamepad2.dpadLeftWasPressed())  turretTrimDeg -= turretTrimStepDeg;
         if (turretAiming()) {
@@ -209,12 +232,14 @@ public class WholeBotTest extends ModularOpMode {
     public void init_loop() {
         super.init_loop();
         localizerSubsystem.addTelemetry(telemetry);
+        writeAimDebug("INIT");
     }
 
     @Override
     public void loop() {
         LoopProfiler.begin();
         updateTurret();
+        writeAimDebug("RUN");
         // gp1 RB: reverse the transfer one ball space (motor backwards only)
         boolean rbNow = gamepad1.right_bumper;
         if (rbNow && !prevRB) transferSubsystem.startReverseStep();
@@ -225,6 +250,7 @@ public class WholeBotTest extends ModularOpMode {
         if (yNow && !prevY) {
             flowerMode = !flowerMode;
         }
+        prevY = yNow;
 
         // gp1 rumble once per ball at transfer colorSensor1.
         if (transferSubsystem.hasBallAtSensor1()) {
