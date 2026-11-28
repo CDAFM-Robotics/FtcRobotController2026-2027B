@@ -7,7 +7,7 @@ import com.cdarobotics.cdalib.opmodes.ModularOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-import org.firstinspires.ftc.teamcode.devices.AxonTurretAngleSource;
+import org.firstinspires.ftc.teamcode.devices.FusedTurretAngleSource;
 import org.firstinspires.ftc.teamcode.subsystems.AutoAimSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.IntakeSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.LauncherSubsystem;
@@ -30,9 +30,10 @@ public class WholeBotTest extends ModularOpMode {
     private TurretSubsystem turretSubsystem;
 
     // Turret: aims Pollen at the CELL from the pose whenever the turret is homed and the pose is known; otherwise it
-    // holds home. Homes itself at Start unless already homed (e.g. in Autonomous); gp2 X re-homes. Start the program with
-    // the turret in 0..+180 (Pollen pointing anywhere from straight right, through the front, to straight left). gp2 dpad left/right
-    // trim the aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
+    // holds home. Angle is fused: the Through Bore encoder (frontRightDriveMotor port) gives the coarse half-turn and
+    // the Axon feedback (turretServoSignal) the fine angle. Home is carried over from Autonomous while the hub stays
+    // powered, or set by hand: point Pollen straight out the right side and press gp2 X. gp2 dpad left/right trim the
+    // aim by turretTrimStepDeg (+ = counterclockwise); gp2 B also clears the trim.
     public static double turretTrimStepDeg = 1.0;
     // Fire gate also waits for the turret to be on target (only while it is aiming; with no pose it never blocks).
     public static boolean requireTurretOnTarget = true;
@@ -125,8 +126,8 @@ public class WholeBotTest extends ModularOpMode {
         launcherSubsystem.setVelocitySource(autoAimSubsystem::getPollenBaseVelocity);
         registerSubsystem(autoAimSubsystem);
 
-        turretSubsystem = new TurretSubsystem(hardwareMap, "turretServo", "turretHomeSensor",
-                new AxonTurretAngleSource(hardwareMap, "turretServoSignal"));
+        turretSubsystem = new TurretSubsystem(hardwareMap, "pollenLauncherServo",
+                new FusedTurretAngleSource(hardwareMap, "frontRightDriveMotor", "pollenLauncherServoVoltage"));
         registerSubsystem(turretSubsystem);
 
         mecanumDriveTrainSubsystem = new MecanumDriveTrainSubsystem(
@@ -179,7 +180,7 @@ public class WholeBotTest extends ModularOpMode {
 
     /** True while the turret is following the CELL (homed, pose known). */
     private boolean turretAiming() {
-        return turretSubsystem.isHomed() && !turretSubsystem.isHoming() && autoAimSubsystem.isAvailable();
+        return turretSubsystem.isHomed() && autoAimSubsystem.isAvailable();
     }
 
     /** Turret doesn't hold up the shot when it isn't aiming; while aiming it must be on target. */
@@ -192,20 +193,14 @@ public class WholeBotTest extends ModularOpMode {
         return isFiring() && wheelReady() && turretReady();
     }
 
-    @Override
-    public void start() {
-        super.start();
-        turretSubsystem.homeIfNeeded();
-    }
-
     /** Turret commands for this loop; runs before the subsystems update. */
     private void updateTurret() {
-        if (gamepad2.xWasPressed()) turretSubsystem.startHoming();
+        if (gamepad2.xWasPressed()) turretSubsystem.setHomeHere();   // point Pollen straight out the right side first
         if (gamepad2.dpadRightWasPressed()) turretTrimDeg += turretTrimStepDeg;
         if (gamepad2.dpadLeftWasPressed())  turretTrimDeg -= turretTrimStepDeg;
         if (turretAiming()) {
             turretSubsystem.setAimDeg(autoAimSubsystem.getTurretTargetDeg() + turretTrimDeg);   // unwinds when it must
-        } else if (turretSubsystem.isHomed() && !turretSubsystem.isHoming()) {
+        } else if (turretSubsystem.isHomed()) {
             turretSubsystem.setTargetDeg(TurretSubsystem.homeAngleDeg);
         }
     }

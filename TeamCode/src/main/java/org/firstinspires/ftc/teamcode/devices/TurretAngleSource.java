@@ -20,14 +20,14 @@ public interface TurretAngleSource {
     boolean isHomed();
 
     /**
-     * Turret angle in degrees (see the convention above), continuous (no wrap: two turns = 720). Before homing it is
-     * still continuous but offset by an unknown amount, so it can measure relative motion (homing uses that).
+     * Turret angle in degrees (see the convention above), continuous (no wrap: two turns = 720). Before a home is set
+     * it is still continuous but offset by an unknown amount, so it can only measure relative motion.
      */
     double getAngleDeg();
 
-    /** Declare that the turret is at {@code turretDeg} right now (called when the Hall sensor trips). */
+    /** Declare that the turret is at {@code turretDeg} right now (absolute start, or calibration's "zero here"). */
     void setHome(double turretDeg);
 
-    /** Forget the home, e.g. before re-homing. */
+    /** Forget the home. */
     void clearHome();
 }

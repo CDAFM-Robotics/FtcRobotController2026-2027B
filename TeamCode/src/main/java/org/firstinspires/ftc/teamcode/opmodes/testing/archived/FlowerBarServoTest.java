@@ -30,7 +30,7 @@ public class FlowerBarServoTest extends LinearOpMode {
 
     @Override
     public void runOpMode() {
-        Servo bar = hardwareMap.tryGet(Servo.class, "flowerBarServo");
+        Servo bar = hardwareMap.tryGet(Servo.class, "wedgeServo");
 
         while (opModeInInit()) {
             telemetry.addData("flowerBarServo", bar == null ? "NOT FOUND in robot configuration" : "found");

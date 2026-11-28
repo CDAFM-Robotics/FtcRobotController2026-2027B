@@ -8,8 +8,8 @@ import org.firstinspires.ftc.teamcode.devices.AxonTurretAngleSource;
 import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
 
 /**
- * Bring-up and tuning for the bot 1.5 turret. Configuration: "turretServo" (Continuous Rotation Servo),
- * "turretServoSignal" (Analog Input, Axon feedback wire), "turretHomeSensor" (Digital Device, Hall sensor).
+ * Bring-up and tuning for the bot 1.5 turret. Configuration: "pollenLauncherServo" (Continuous Rotation Servo),
+ * "pollenLauncherServoVoltage" (Analog Input, Axon feedback wire).
  *
  * Suggested order (all values are live in Panels under TurretSubsystem / AxonTurretAngleSource):
  *  1. Direction: gp1 left stick right should turn the turret COUNTERCLOCKWISE seen from above. If not, flip
@@ -18,19 +18,15 @@ import org.firstinspires.ftc.teamcode.subsystems.TurretSubsystem;
  *     AxonTurretAngleSource.minVoltage / maxVoltage.
  *  3. Angle direction: press X to zero, then stick right - the turret angle must go UP. If not, flip
  *     AxonTurretAngleSource.reversed. Turn the turret 90 deg by hand-measure; the angle should read ~90 (else check gearRatio).
- *  4. Hall sensor: wave the magnet past it; "Hall" must read MAGNET only near it (else flip hallActiveLow).
- *  5. Home angle: point Pollen exactly straight out the right side, set homeAngleDeg = 0, press X. Move the turret
- *     with the stick to the side opposite homingDirection, past the magnet, then creep it in homingDirection until
- *     "Hall" reads MAGNET: the angle shown is the trip point. Repeat, average, put it in homeAngleDeg.
- *  6. Homing: with the turret in 0..+180, press A. It moves toward the magnet, backs off, and approaches slowly;
- *     afterwards the angle should read 0 with Pollen straight out the right side.
- *  6b. Absolute start: once homed (A), copy "servoDegAtZero" from telemetry into AxonTurretAngleSource.servoDegAtZero
- *     in the code. From then on the angle is known at INIT with no homing, as long as the program starts with the
- *     turret in 0..+180 (TurretSubsystem.startWindowCenterDeg +/- 90). Check: restart with the turret at a few spots in that range;
- *     "Homed" should say "absolute start" and the angle should match.
- *  7. Limits: the wires allow one full turn (-180..180 around home). With the stick, wind it each way until the
+ *  4. Home angle: point Pollen exactly straight out the right side, set homeAngleDeg = 0, press X. The angle now
+ *     reads 0 at that spot.
+ *  4b. Absolute start: with Pollen straight out the right side and X pressed, copy "servoDegAtZero" from telemetry
+ *     into AxonTurretAngleSource.servoDegAtZero in the code. From then on the angle is known at INIT with no homing,
+ *     as long as the program starts with the turret in 0..+180 (TurretSubsystem.startWindowCenterDeg +/- 90). Check:
+ *     restart with the turret at a few spots in that range; "Homed" should say "absolute start" and the angle should match.
+ *  5. Limits: the wires allow one full turn (-180..180 around home). With the stick, wind it each way until the
  *     wires get tight; set minAngleDeg / maxAngleDeg a little inside.
- *  8. Loop: dpad left/right step the target by stepDeg. Raise kS until small steps move, then kP until it is quick
+ *  6. Loop: dpad left/right step the target by stepDeg. Raise kS until small steps move, then kP until it is quick
  *     without overshoot. Y toggles a sweep between -sweepDeg and +sweepDeg to check it repeatably.
  */
 @Configurable
@@ -52,8 +48,8 @@ public class TurretCalibration extends ModularOpMode {
 
     @Override
     protected void preload() {
-        angle = new AxonTurretAngleSource(hardwareMap, "pollenLauncherSensor");
-        turret = new TurretSubsystem(hardwareMap, "pollenLauncherServo", "pollenLauncherServoVoltage", angle);
+        angle = new AxonTurretAngleSource(hardwareMap, "pollenLauncherServoVoltage");
+        turret = new TurretSubsystem(hardwareMap, "pollenLauncherServo", angle);
         registerSubsystem(turret);
     }
 
@@ -61,7 +57,6 @@ public class TurretCalibration extends ModularOpMode {
     public void loop() {
         double stick = gamepad1.left_stick_x;
 
-        if (gamepad1.aWasPressed()) { sweeping = false; turret.startHoming(); }
         if (gamepad1.xWasPressed()) { sweeping = false; turret.setHomeHere(); target = TurretSubsystem.homeAngleDeg; }
         if (gamepad1.bWasPressed()) { sweeping = false; turret.setManualPower(0); }
         if (gamepad1.yWasPressed()) { sweeping = !sweeping; sweepTimer.reset(); }
@@ -72,7 +67,7 @@ public class TurretCalibration extends ModularOpMode {
         if (sweeping && turret.isHomed()) {
             boolean high = ((int) (sweepTimer.seconds() / sweepPeriodSec)) % 2 == 0;
             turret.setTargetDeg(high ? sweepDeg : -sweepDeg);
-        } else if (Math.abs(stick) > 0.05 && !turret.isHoming()) {
+        } else if (Math.abs(stick) > 0.05) {
             sweeping = false;
             turret.setManualPower(stick * manualScale);
         } else if (turret.getState() == TurretSubsystem.State.MANUAL) {
@@ -91,13 +86,10 @@ public class TurretCalibration extends ModularOpMode {
         telemetry.addData("Power", "%.3f", turret.getPower());
         telemetry.addData("Feedback V", "%.3f   (seen min / max %.3f / %.3f)", v, vMin, vMax);
         telemetry.addData("Servo deg in turn / total", "%.1f / %.1f", angle.getServoDeg(), angle.getServoTotalDeg());
-        telemetry.addData("Hall", !turret.isHomeSensorConfigured() ? "NOT CONFIGURED (turretHomeSensor)"
-                : (turret.isAtHomeSensor() ? "MAGNET" : "clear"));
         telemetry.addData("Homed", !turret.isHomed() ? "no"
                 : (angle.isCarriedOver() ? "yes (from earlier OpMode)" : (angle.isAbsoluteStart() ? "yes (absolute start)" : "yes")));
         telemetry.addData("servoDegAtZero (copy to code)", "%.1f", angle.getServoDegAtZeroEstimate());
-        telemetry.addData("Last Hall check error", "%.1f deg", turret.getLastHallCheckErrDeg());
-        telemetry.addLine("gp1: stick X manual | A home | X zero here | dpad L/R step | Y sweep | B stop");
+        telemetry.addLine("gp1: stick X manual | X zero here | dpad L/R step | Y sweep | B stop");
         telemetry.update();
     }
 }
